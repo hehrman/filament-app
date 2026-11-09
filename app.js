@@ -108,7 +108,7 @@ function applyTheme() {
 
 /* ------------------------------------------------------ derived data */
 const D = () => state.data || {};
-const settings = () => D().settings || { directors: [], films: [], notifications: {}, schedule: { times: ["09:00", "18:00"] } };
+const settings = () => D().settings || { directors: [], films: [], notifications: {}, schedule: { times: ["09:00"] } };
 
 function upcomingItems() {
   const today = todayISO();
@@ -286,7 +286,7 @@ function viewFind() {
       </div>
     </article>`;
   }).join("");
-  return `<div class="find-head"><span><b>${groups.length ? plural(groups.length, "film") : "Nothing"}</b> playing in New York matching “${h(q)}”</span>
+  return `<div class="find-head"><span><b>${groups.length ? plural(groups.length, "film") : "Nothing"}</b> playing in New York matching “${h(q)}” · follow any of them to get alerts</span>
       <button class="btn btn--sm btn--ghost" data-action="find-clear">Clear</button></div>
     ${groups.length ? list : `<div class="empty"><h3>Not on Screen Slate’s NYC calendar right now</h3>
       <p>Follow it and Filament will email you the moment it’s scheduled.</p>
@@ -306,7 +306,9 @@ function viewUpcoming() {
       <h3>No upcoming screenings yet</h3>
       <p>${D().status?.last_success ? "Nothing you follow is on Screen Slate’s NYC calendar right now. Filament checks every morning and will email you the moment something appears." : "Once the first check runs, upcoming screenings of what you follow will appear here."}</p></div>`;
   return `<div class="page">
-    <header class="page-head"><div><div class="eyebrow">Screen Slate · New York</div><h1 class="page-title">Upcoming</h1><p class="page-sub">${following}</p></div></header>
+    ${state.find.trim().length >= 2
+      ? `<header class="page-head"><div><div class="eyebrow">Search all of New York</div><h1 class="page-title">Is it playing?</h1><p class="page-sub">Everything on Screen Slate’s NYC calendar — not just what you follow.</p></div></header>`
+      : `<header class="page-head"><div><div class="eyebrow">Screen Slate · New York</div><h1 class="page-title">Upcoming</h1><p class="page-sub">${following}</p></div></header>`}
     <div class="search search--find">${ICON.search}<input id="find" type="search" autocomplete="off" placeholder="Is it playing? Search any film, director or theater" value="${h(state.find)}" aria-label="Search everything playing in New York"></div>
     ${state.find.trim().length >= 2 ? viewFind() : `
     ${consoleBlock()}
@@ -460,7 +462,7 @@ function viewSettings() {
   const s = settings();
   const n = s.notifications || {};
   const st = D().status || {};
-  const times = s.schedule?.times || ["09:00", "18:00"];
+  const times = s.schedule?.times || ["09:00"];
   const theme = applyTheme();
   const sw = (key, on, lbl) => `<label class="switch"><input type="checkbox" data-action="notif" data-key="${key}" ${on ? "checked" : ""} aria-label="${h(lbl)}"><span></span></label>`;
   const prov = st.email_provider;
@@ -470,7 +472,7 @@ function viewSettings() {
 
     <div class="group-label">Email notifications</div>
     <div class="group">
-      <div class="row"><div class="row__main"><div class="row__title">Email alerts</div><div class="row__sub">One email per check, only when something changed</div></div>${sw("email_enabled", n.email_enabled !== false, "Email alerts")}</div>
+      <div class="row"><div class="row__main"><div class="row__title">Email alerts</div><div class="row__sub">At most one email a day, only when something changed</div></div>${sw("email_enabled", n.email_enabled !== false, "Email alerts")}</div>
       <div class="row"><div class="row__main"><div class="row__title">Send to</div><div class="row__sub">Leave empty to use the address saved in GitHub</div></div>
         <input type="email" id="recipient" value="${h(n.recipient || "")}" placeholder="you@example.com" style="width:min(240px,46vw)"></div>
       <div class="row"><div class="row__main"><div class="row__title">New screenings</div><div class="row__sub">A film you follow appears on the calendar</div></div>${sw("notify_new", n.notify_new !== false, "New screenings")}</div>
@@ -504,7 +506,7 @@ function viewSettings() {
       <div class="row"><div class="row__main"><div class="row__title">Connected to</div><div class="row__sub">${h(state.src?.label || "")}</div></div>
         ${isLocal() ? "" : `<button class="btn btn--sm btn--danger" data-action="disconnect">Disconnect</button>`}</div>
     </div>
-    <p class="group-foot">Filament reads Screen Slate’s public NYC listings (lab.screenslate.com) twice a day. Listings data © Screen Slate.</p>
+    <p class="group-foot">Filament reads Screen Slate’s public NYC listings (lab.screenslate.com) once a day. Listings data © Screen Slate.</p>
   </div>`;
 }
 
@@ -868,9 +870,9 @@ document.addEventListener("change", (ev) => {
   } else if (el.dataset.action === "time") {
     const i = Number(el.dataset.i), v = el.value;
     if (!/^\d\d:\d\d$/.test(v)) return;
-    const next = [...(settings().schedule?.times || ["09:00", "18:00"])];
+    const next = [...(settings().schedule?.times || ["09:00"])];
     next[i] = v;
-    saveSettings((s) => { s.schedule = s.schedule || { timezone: TZ }; const t = [...(s.schedule.times || ["09:00", "18:00"])]; t[i] = v; s.schedule.times = t; },
+    saveSettings((s) => { s.schedule = s.schedule || { timezone: TZ }; const t = [...(s.schedule.times || ["09:00"])]; t[i] = v; s.schedule.times = t; },
       "Change check times", `Checks at ${next.map(fmtTime12).join(" and ")}`);
   } else if (el.dataset.action === "venue-toggle") {
     const v = el.value, on = el.checked;
