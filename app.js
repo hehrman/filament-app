@@ -1,10 +1,11 @@
-import { creditIsDirector, fold, matchFilm, matchOccurrence } from "./match.js?v=20261109191656";
+import { creditIsDirector, fold, matchFilm, matchOccurrence } from "./match.js?v=20261109194837";
 import {
   ApiError, cached, forgetConnection, isLocal, loadAll, loadConnection, makeSource, mutateSettings, saveConnection,
-} from "./data.js?v=20261109191656";
+} from "./data.js?v=20261109194837";
+import { followList, forYou, importExport, lookup, lovedDirectors, stars } from "./letterboxd.js?v=20261109194837";
 import {
   filmographyFor, searchCatalog, searchWikidataDirectors, searchWikidataFilms, slugFromCatalog,
-} from "./search.js?v=20261109191656";
+} from "./search.js?v=20261109194837";
 
 const TZ = "America/New_York";
 const app = document.getElementById("app");
@@ -59,12 +60,13 @@ const ICON = {
   close: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>`,
   trash: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h14M10 7V5h4v2M7 7l1 13h8l1-13"/></svg>`,
   calendar: `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>`,
+  share: `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3.5M8 7l4-4 4 4"/><path d="M7 10H5.5A1.5 1.5 0 0 0 4 11.5v8A1.5 1.5 0 0 0 5.5 21h13a1.5 1.5 0 0 0 1.5-1.5v-8A1.5 1.5 0 0 0 18.5 10H17"/></svg>`,
   refresh: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/></svg>`,
 };
 const TURNBUCKLE = `<svg viewBox="0 0 46 12" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="6" cy="6" r="3"/><path d="M9 6h4"/><rect x="13" y="2.5" width="20" height="7" rx="3.5"/><path d="M17 6h12" stroke-dasharray="1.5 1.5"/><path d="M33 6h4"/><circle cx="40" cy="6" r="3"/></svg>`;
 const lampSVG = `<svg viewBox="0 0 40 40" fill="none"><circle cx="20" cy="17" r="10.5" stroke="currentColor" stroke-opacity=".45" stroke-width="1.4"/><path class="filament" d="M14.5 18.5l2.2-3.5 2.2 3.5 2.2-3.5 2.2 3.5 2.2-3.5" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M15.5 26.5h9v4.5h-9z" fill="#B48A45"/><path d="M15.5 28.4h9" stroke="#120F0C" stroke-opacity=".4"/><path d="M18 31h4v2.2h-4z" fill="#7A5A28"/></svg>`;
 const lamp = (st, lg) => `<span class="lamp${lg ? " lamp--lg" : ""}" data-state="${st}" style="color:var(--text-2)">${lampSVG}</span>`;
-const wire = `<div class="wire" aria-hidden="true">${TURNBUCKLE}</div>`;
+const wireEl = () => `<div class="wire${state.running ? " wire--live" : ""}" aria-hidden="true">${TURNBUCKLE}<span class="wire__spark"></span></div>`;
 
 // "A Thinking Room": brass tubes rising toward a curved gold ceiling.
 function tubesArt(w = 520, hgt = 220) {
@@ -109,10 +111,25 @@ function applyTheme() {
 /* ------------------------------------------------------ derived data */
 const D = () => state.data || {};
 const settings = () => D().settings || { directors: [], films: [], notifications: {}, schedule: { times: ["09:00"] } };
-
+const lbData = () => D().letterboxd || null;
+const lbCfg = () => settings().letterboxd || {};
+let interestsMemo = { s: null, l: null, v: null };
+/** Everything Filament follows: your directors & films plus Letterboxd favourites. */
+function interests() {
+  const s = settings(), l = lbData();
+  if (interestsMemo.s !== s || interestsMemo.l !== l) interestsMemo = { s, l, v: { ...s, _letterboxd: followList(l, s.letterboxd) } };
+  return interestsMemo.v;
+}
+let upcomingMemo = { k: null, v: null };
 function upcomingItems() {
+  const key = [D(), interests(), todayISO()];
+  if (upcomingMemo.k && upcomingMemo.k.every((x, i) => x === key[i])) return upcomingMemo.v;
+  upcomingMemo = { k: key, v: computeUpcoming() };
+  return upcomingMemo.v;
+}
+function computeUpcoming() {
   const today = todayISO();
-  const s = settings();
+  const s = interests();
   const disc = D().history?.discoveries || {};
   const out = [];
   for (const d of Object.values(disc)) {
@@ -149,11 +166,36 @@ const newTimes = (d) => {
 };
 
 /* --------------------------------------------------------- components */
+/** A director's portrait (Wikimedia Commons) over their initials, which show if there's no photo. */
+function personPhoto(name, tmdb, photo) {
+  if (photo) return photo;
+  const ppl = D().people?.people || {};
+  const k = tmdb ? `t${tmdb}` : `n${(name || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "")}`;
+  return ppl[k]?.photo || null;
+}
+function avatar(name, tmdb, photo, cls = "") {
+  const src = personPhoto(name, tmdb, photo);
+  return `<span class="avatar gilt ${cls}"><span class="avatar__i">${h(initials(name || "?"))}</span>${src ? `<img src="${h(src)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.remove()">` : ""}</span>`;
+}
+/** Poster for a followed film, from what Filament has seen in the listings. */
+function catalogPoster(f) {
+  const films = D().catalog?.films || {};
+  const hit = (f.slug && films[f.slug]) || Object.values(films).find((x) => x.poster && x.title.toLowerCase() === (f.title || "").toLowerCase() && (!f.year || !x.year || Math.abs(x.year - f.year) <= 1));
+  return hit?.poster || null;
+}
+
 const posterImg = (src, cls) => src
   ? `<img class="${cls}" src="${h(src)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.remove()">` : "";
 
+function seenTag(films) {
+  const rec = films.map((f) => lookup(lbData(), f)).find((r) => r && r.w);
+  if (!rec) return "";
+  return `<span class="tag tag--seen" title="From your Letterboxd">${rec.r ? `Seen · ${stars(rec.r)}` : "Seen"}</span>`;
+}
+
 function screeningCard(d, { muted } = {}) {
   const tag = recency(d);
+  const seen = seenTag(d.films);
   const fresh = newTimes(d);
   const fmt = [...new Set(d.films.map((f) => f.format).filter(Boolean))];
   const films = d.films.map((f) => `
@@ -164,7 +206,7 @@ function screeningCard(d, { muted } = {}) {
     <span class="card__body">
       ${posterImg(d.poster, "card__poster")}
       <span class="card__content">
-      ${tag || fmt.length ? `<span class="card__top">${tag ? `<span class="tag ${tag.cls}">${h(tag.text)}</span>` : ""}${fmt.map((x) => `<span class="tag tag--fmt">${h(x)}</span>`).join("")}</span>` : ""}
+      ${tag || fmt.length || seen ? `<span class="card__top">${tag ? `<span class="tag ${tag.cls}">${h(tag.text)}</span>` : ""}${fmt.map((x) => `<span class="tag tag--fmt">${h(x)}</span>`).join("")}${seen}</span>` : ""}
       ${films}
       <span class="card__where"><span class="venue">${h(d.venue)}</span>${d.series ? `<span class="series">${h(d.series)}</span>` : ""}</span>
       <span class="times">${(d.showtimes?.length ? d.showtimes : ["Time TBA"]).map((t) => `<span class="time${fresh.has(t) ? " time--new" : ""}">${h(t)}</span>`).join("")}</span>
@@ -235,6 +277,7 @@ function consoleBlock() {
 /* --------------------------------------------- "Is it playing?" search */
 const isFollowingCredit = (c) => settings().directors.some((d) => creditIsDirector(c, d));
 const isFollowingFilm = (f) => settings().films.some((x) => matchFilm(f, x));
+const isLetterboxdFollow = (f) => (interests()._letterboxd || []).some((x) => matchFilm(f, x));
 const filmIndex = new Map();   // key -> film, for follow buttons
 
 function findGroups(q) {
@@ -274,6 +317,7 @@ function followButtons(films) {
     const fk = f.slug || f.title;
     filmIndex.set(fk, f);
     if ((f.directors || []).some(isFollowingCredit)) continue;   // already covered by a followed director
+    if (isLetterboxdFollow(f)) { out.push(`<span class="tag tag--following">Following via Letterboxd</span>`); continue; }
     out.push(isFollowingFilm(f)
       ? `<span class="tag tag--following">Following this film</span>`
       : `<button class="btn btn--sm" data-action="follow-film" data-fk="${h(fk)}">+ Follow “${h(f.title)}”</button>`);
@@ -291,6 +335,7 @@ function viewFind() {
     return `<article class="find">
       ${posterImg(g.poster, "find__poster")}
       <div class="find__main">
+        ${seenTag([f]) ? `<div class="card__top">${seenTag([f])}</div>` : ""}
         <h3 class="card__title">${h(f.title)}</h3>
         <div class="card__meta">${h(directorsOf(f) || "Director not listed")}${f.year ? `<span class="dot">·</span>${f.year}` : ""}${f.runtime ? `<span class="dot">·</span>${f.runtime} min` : ""}</div>
         <div class="find__slots">${slots}${g.occs.length > 6 ? `<span class="slot slot--more">+${g.occs.length - 6} more dates</span>` : ""}</div>
@@ -308,11 +353,36 @@ function viewFind() {
       </div></div>`}`;
 }
 
+function forYouBlock() {
+  const l = lbData();
+  if (!l?.films || lbCfg().enabled === false) return "";
+  const followed = (o) => matchOccurrence(o, interests()).length > 0;
+  const picks = forYou(Object.values(D().listings?.occurrences || {}), l, followed, todayISO());
+  if (!picks.length) return "";
+  return `<section class="foryou" aria-label="For you">
+    <div class="foryou__head"><div><div class="eyebrow">Based on your Letterboxd</div><h2 class="section-title">For you</h2></div></div>
+    <div class="foryou__rail">${picks.map((g) => {
+      const o = g.occs[0];
+      return `<article class="pick">
+        <button class="pick__open" data-action="open" data-key="${h(o.key)}" aria-label="${h(g.film.title)}">
+          <span class="pick__art">${posterImg(g.poster, "pick__poster")}</span>
+          <span class="pick__title">${h(g.film.title)}</span>
+          <span class="pick__why">${h(g.why)}</span>
+          <span class="pick__when"><b>${h(fmtDay(o.date, { weekday: "short", month: "short", day: "numeric" }))}</b> · ${h(o.venue)}${g.occs.length > 1 ? ` · +${g.occs.length - 1} more` : ""}</span>
+        </button>
+        <div class="pick__follow">${followButtons([g.film])}</div>
+      </article>`;
+    }).join("")}</div>
+  </section>`;
+}
+
 /* ----------------------------------------------------------- views */
 function viewUpcoming() {
   const items = upcomingItems();
   const s = settings();
   const names = [...s.directors.filter((d) => d.enabled !== false).map((d) => d.name), ...s.films.filter((f) => f.enabled !== false).map((f) => f.title)];
+  const lbn = (interests()._letterboxd || []).length;
+  if (lbn) names.push(`${lbn} Letterboxd favorites`);
   const following = names.length ? `Following ${names.slice(0, 3).map(h).join(", ")}${names.length > 3 ? ` and ${names.length - 3} more` : ""}` : "You aren’t following anyone yet";
   const body = items.length ? dayGroups(items) : `<div class="empty">${tubesArt(360, 150)}
       <h3>No upcoming screenings yet</h3>
@@ -324,8 +394,9 @@ function viewUpcoming() {
     <div class="search search--find">${ICON.search}<input id="find" type="search" autocomplete="off" placeholder="Is it playing? Search films & directors" value="${h(state.find)}" aria-label="Search everything playing in New York"></div>
     ${state.find.trim().length >= 2 ? viewFind() : `
     ${consoleBlock()}
-    ${items.length ? `${wire}<div style="height:22px"></div>` : ""}
-    ${body}`}
+    ${items.length ? `${wireEl()}<div style="height:22px"></div>` : ""}
+    ${body}
+    ${forYouBlock()}`}
   </div>`;
 }
 
@@ -339,11 +410,11 @@ function resultsBlock() {
   const isDir = state.watchTab === "directors";
   const rows = [];
   for (const x of r.catalog) rows.push(`<button class="result" data-action="add-catalog" data-id="${h(isDir ? x.slug || x.name : x.slug || x.title)}">
-      <div><div class="row__title">${h(isDir ? x.name : x.title)}${!isDir && x.year ? ` <span style="color:var(--text-3);font-weight:400">(${x.year})</span>` : ""}</div>
+      ${isDir ? avatar(x.name, x.tmdb, null, "avatar--sm") : posterImg(x.poster, "row__poster")}<div><div class="row__title">${h(isDir ? x.name : x.title)}${!isDir && x.year ? ` <span style="color:var(--text-3);font-weight:400">(${x.year})</span>` : ""}</div>
       <div class="row__sub">${h(isDir ? `Recently playing: ${(x.films || []).slice(-3).join(", ")}` : (x.directors || []).join(", "))}</div></div>
       <span class="result__src">In NYC listings</span></button>`);
   for (const x of r.wiki) rows.push(`<button class="result" data-action="add-wiki" data-id="${h(x.qid)}">
-      <div><div class="row__title">${h(isDir ? x.name : x.title)}${!isDir && x.year ? ` <span style="color:var(--text-3);font-weight:400">(${x.year})</span>` : ""}${isDir && (x.born || x.died) ? ` <span style="color:var(--text-3);font-weight:400">${x.born || ""}–${x.died || ""}</span>` : ""}</div>
+      ${isDir ? avatar(x.name, x.tmdb, x.photo, "avatar--sm") : ""}<div><div class="row__title">${h(isDir ? x.name : x.title)}${!isDir && x.year ? ` <span style="color:var(--text-3);font-weight:400">(${x.year})</span>` : ""}${isDir && (x.born || x.died) ? ` <span style="color:var(--text-3);font-weight:400">${x.born || ""}–${x.died || ""}</span>` : ""}</div>
       <div class="row__sub">${h(isDir ? x.description : [x.directors.join(", "), x.description].filter(Boolean).join(" · "))}</div></div>
       <span class="result__src">Film database</span></button>`);
   rows.push(`<button class="result" data-action="add-manual"><div><div class="row__title">Add “${h(state.query.trim())}” as typed</div>
@@ -352,42 +423,80 @@ function resultsBlock() {
   return `<div class="results" role="listbox">${rows.join("")}${note}</div>`;
 }
 
+function viewLetterboxd() {
+  const l = lbData(), cfg = lbCfg();
+  const connected = l?.films && Object.keys(l.films).length && cfg.enabled !== false;
+  const importBtn = `<label class="btn btn--brass file-btn">${connected ? "Re-import export" : "Import your Letterboxd export"}<input type="file" accept=".zip,application/zip" data-action="lb-import" hidden></label>`;
+  if (!connected) {
+    return `<div class="empty lb-empty"><h3>Bring your Letterboxd</h3>
+      <p>Follow every film you’ve rated highly, see what you’ve already watched, and get suggestions for what’s playing.</p>
+      <div class="actions" style="justify-content:center;margin-top:18px">${importBtn}</div>
+      <p class="group-foot" style="margin-top:16px">On letterboxd.com: <b>Settings → Data → Export your data</b>. Upload the .zip here — only film titles, years, ratings and your watchlist are kept.</p></div>`;
+  }
+  const films = Object.values(l.films);
+  const rated = films.filter((f) => f.r).length, wl = films.filter((f) => f.wl).length;
+  const follows = interests()._letterboxd || [];
+  const minR = Number(cfg.min_rating ?? 4.5);
+  const n = upcomingItems().filter((d) => d.status === "active" && d.reasons.some((r) => r.kind === "letterboxd")).length;
+  const loved = lovedDirectors(l).slice(0, 12);
+  const sw = (key, on, lbl) => `<label class="switch"><input type="checkbox" data-action="lb-set" data-key="${key}" ${on ? "checked" : ""} aria-label="${h(lbl)}"><span></span></label>`;
+  return `<div class="group">
+      <div class="row"><div class="monogram gilt">LB</div><div class="row__main"><div class="row__title">${h(cfg.username || "Letterboxd")}</div>
+        <div class="row__sub">${rated} rated · ${films.filter((f) => f.w).length} watched · ${wl} on watchlist${l.rss_synced_at ? ` · synced ${h(fmtWhen(l.rss_synced_at))}` : ""}</div></div>${importBtn}</div>
+      <div class="row"><div class="row__main"><div class="row__title">Follow films I rated</div><div class="row__sub">${follows.length} films followed automatically${n ? ` · <span class="interest__count">${plural(n, "upcoming screening")}</span>` : ""}</div></div>
+        <div class="seg">${[[5, "★★★★★"], [4.5, "★★★★½+"], [4, "★★★★+"]].map(([v, l2]) => `<button data-action="lb-min" data-v="${v}" aria-pressed="${minR === v}">${l2}</button>`).join("")}</div></div>
+      <div class="row"><div class="row__main"><div class="row__title">Also follow my watchlist</div><div class="row__sub">${plural(wl, "film")} you want to see</div></div>${sw("include_watchlist", !!cfg.include_watchlist, "Follow watchlist")}</div>
+      <div class="row"><div class="row__main"><div class="row__title">Sync new ratings every morning</div><div class="row__sub">Reads your public Letterboxd diary, so new favorites are followed automatically</div></div>${sw("sync_rss", cfg.sync_rss !== false, "Sync daily")}</div>
+    </div>
+    ${loved.length ? `<div class="group-label">Directors you love</div>
+    <div class="group">${loved.map((d) => {
+      const c = { name: d.name, tmdb: d.tmdb };
+      return `<div class="row">${avatar(d.name, d.tmdb)}<div class="row__main"><div class="row__title">${h(d.name)}</div><div class="row__sub">${plural(d.films.length, "film")} rated 4★ or higher · ${h(d.films.slice(0, 3).map((f) => f.t).join(", "))}</div></div>
+        ${isFollowingCredit(c) ? `<span class="tag tag--following">Following</span>` : `<button class="btn btn--sm" data-action="follow-dir" data-name="${h(d.name)}" data-tmdb="${h(d.tmdb || "")}" data-slug="">+ Follow</button>`}</div>`;
+    }).join("")}</div>` : ""}
+    <details class="more lb-list"><summary>Show the ${follows.length} films you follow from Letterboxd</summary>
+      <div class="filmography">${follows.sort((a, b) => (b.rating || 0) - (a.rating || 0) || a.title.localeCompare(b.title)).map((f) => `<span class="chip"><b>${h(f.title)}</b> ${f.year || ""} <span class="stars">${stars(f.rating)}</span></span>`).join("")}</div></details>
+    <div class="actions" style="margin-top:18px"><button class="btn btn--sm btn--danger" data-action="lb-off">Stop using Letterboxd</button></div>`;
+}
+
 function viewWatchlist() {
   const s = settings();
   const isDir = state.watchTab === "directors";
+  const isLb = state.watchTab === "letterboxd";
   const list = isDir
     ? (s.directors.length ? s.directors.map((d) => {
         const n = upcomingCountFor(d.id);
         const upcomingTitles = new Set(upcomingItems().filter((u) => u.reasons.some((r) => r.interest === d.id)).flatMap((u) => u.films.map((f) => f.title.toLowerCase())));
         const fg = d.filmography || [];
         const chip = (f) => `<span class="chip${upcomingTitles.has(f.title.toLowerCase()) ? " chip--on" : ""}"><b>${h(f.title)}</b>${f.year ? ` ${f.year}` : ""}</span>`;
-        return `<article class="interest" style="${d.enabled === false ? "opacity:.6" : ""}">
+        return `<div class="swipe" data-swipe-kind="directors" data-swipe-id="${h(d.id)}"><div class="swipe__under" aria-hidden="true">Remove</div><article class="interest" style="${d.enabled === false ? "opacity:.6" : ""}">
           <div class="interest__head">
-            <div class="monogram gilt">${h(initials(d.name))}</div>
+            ${avatar(d.name, d.tmdb, d.photo, "avatar--lg")}
             <div style="flex:1;min-width:0"><div class="interest__name">${h(d.name)}</div>
               <div class="interest__sub">${[d.years, fg.length ? plural(fg.length, "film") : "", n ? `<span class="interest__count">${plural(n, "upcoming screening")}</span>` : "No upcoming screenings"].filter(Boolean).join(" · ")}</div></div>
             <label class="switch" title="Monitoring on/off"><input type="checkbox" data-action="toggle" data-kind="directors" data-id="${h(d.id)}" ${d.enabled === false ? "" : "checked"} aria-label="Monitor ${h(d.name)}"><span></span></label>
             <button class="icon-btn" data-action="remove" data-kind="directors" data-id="${h(d.id)}" aria-label="Remove ${h(d.name)}">${ICON.trash}</button>
           </div>
           ${fg.length ? `<div class="filmography">${fg.slice(0, 10).map(chip).join("")}</div>${fg.length > 10 ? `<details class="more"><summary>Show all ${fg.length} films</summary><div class="filmography">${fg.slice(10).map(chip).join("")}</div></details>` : ""}` : ""}
-        </article>`;
+        </article></div>`;
       }).join("") : `<div class="empty"><h3>No directors yet</h3><p>Search above to follow a director’s entire filmography.</p></div>`)
     : (s.films.length ? `<div class="group">${s.films.map((f) => {
         const n = upcomingCountFor(f.id);
-        return `<div class="row" style="${f.enabled === false ? "opacity:.6" : ""}"><div class="row__main"><div class="row__title">${h(f.title)}${f.year ? ` <span style="color:var(--text-3);font-weight:400">(${f.year})</span>` : ""}</div>
+        return `<div class="swipe" data-swipe-kind="films" data-swipe-id="${h(f.id)}"><div class="swipe__under" aria-hidden="true">Remove</div><div class="row" style="${f.enabled === false ? "opacity:.6" : ""}">${posterImg(catalogPoster(f), "row__poster") || `<span class="row__poster row__poster--empty plywood"></span>`}<div class="row__main"><div class="row__title">${h(f.title)}${f.year ? ` <span style="color:var(--text-3);font-weight:400">(${f.year})</span>` : ""}</div>
           <div class="row__sub">${h([(f.directors || []).join(", "), f.aka?.length ? `also “${f.aka.slice(0, 2).join("”, “")}”` : ""].filter(Boolean).join(" · "))}${n ? ` · <span class="interest__count">${plural(n, "upcoming")}</span>` : ""}</div></div>
           <label class="switch"><input type="checkbox" data-action="toggle" data-kind="films" data-id="${h(f.id)}" ${f.enabled === false ? "" : "checked"} aria-label="Monitor ${h(f.title)}"><span></span></label>
-          <button class="icon-btn" data-action="remove" data-kind="films" data-id="${h(f.id)}" aria-label="Remove ${h(f.title)}">${ICON.trash}</button></div>`;
+          <button class="icon-btn" data-action="remove" data-kind="films" data-id="${h(f.id)}" aria-label="Remove ${h(f.title)}">${ICON.trash}</button></div></div>`;
       }).join("")}</div>` : `<div class="empty"><h3>No individual films yet</h3><p>Follow a single film — like <i>Eyes Wide Shut</i> — without following its director’s whole career.</p></div>`);
   return `<div class="page">
     <header class="page-head"><div><div class="eyebrow">What you follow</div><h1 class="page-title">Watchlist</h1></div>
-      <div class="seg" role="group" aria-label="Directors or films">
+      <div class="seg" role="group" aria-label="Directors, films or Letterboxd">
         <button data-action="tab" data-tab="directors" aria-pressed="${isDir}">Directors · ${s.directors.length}</button>
-        <button data-action="tab" data-tab="films" aria-pressed="${!isDir}">Films · ${s.films.length}</button>
+        <button data-action="tab" data-tab="films" aria-pressed="${!isDir && !isLb}">Films · ${s.films.length}</button>
+        <button data-action="tab" data-tab="letterboxd" aria-pressed="${isLb}">Letterboxd</button>
       </div></header>
-    <div class="search">${ICON.search}<input id="q" type="search" autocomplete="off" placeholder="${isDir ? "Add a director — e.g. Stanley Kubrick" : "Add a film — e.g. Eyes Wide Shut"}" value="${h(state.query)}" aria-label="Search">
+    ${isLb ? viewLetterboxd() : `<div class="search">${ICON.search}<input id="q" type="search" autocomplete="off" placeholder="${isDir ? "Add a director — e.g. Stanley Kubrick" : "Add a film — e.g. Eyes Wide Shut"}" value="${h(state.query)}" aria-label="Search">
       ${resultsBlock()}</div>
-    ${list}
+    ${list}`}
   </div>`;
 }
 
@@ -408,7 +517,7 @@ function viewArchive() {
     if (d.status === "moved") return `<span class="tag tag--update">Rescheduled</span>`;
     if (d.status === "missing") return `<span class="tag tag--gone">Removed</span>`;
     if (d.date < today || d.status === "past") return `<span class="tag">Screened</span>`;
-    return matchOccurrence(d, s).length ? `<span class="tag tag--soon">Upcoming</span>` : `<span class="tag">Unfollowed</span>`;
+    return matchOccurrence(d, interests()).length ? `<span class="tag tag--soon">Upcoming</span>` : `<span class="tag">Unfollowed</span>`;
   };
   const seg = [["upcoming", "Upcoming"], ["past", "Past"], ["removed", "Removed"], ["all", "All"]]
     .map(([k, l]) => `<button data-action="afilter" data-f="${k}" aria-pressed="${f === k}">${l}</button>`).join("");
@@ -418,7 +527,7 @@ function viewArchive() {
     <div class="toolbar"><div class="seg" role="group">${seg}</div><input id="aq" type="search" placeholder="Filter by film, director or venue" value="${h(state.archiveQuery)}"></div>
     ${rows.length ? `<div class="group">${rows.map((d) => `<button class="ledger-row" data-action="open" data-key="${h(d.key)}">
         <span class="ledger-date">${fmtDay(d.date, { weekday: "short", month: "short", day: "numeric", year: "numeric" })}</span>
-        <span><span class="row__title">${h(d.films.map((x) => x.title).join(" + "))}</span><span class="row__sub" style="display:block">${h(d.venue)} · ${h(directorsOf(d.films[0]))}${d.showtimes?.length ? ` · ${h(d.showtimes.join(", "))}` : ""}</span></span>
+        <span class="ledger-main">${posterImg(d.poster, "row__poster")}<span><span class="row__title">${h(d.films.map((x) => x.title).join(" + "))}</span><span class="row__sub" style="display:block">${h(d.venue)} · ${h(directorsOf(d.films[0]))}${d.showtimes?.length ? ` · ${h(d.showtimes.join(", "))}` : ""}</span></span></span>
         ${statusTag(d)}</button>`).join("")}</div>`
       : `<div class="empty"><h3>Nothing here</h3><p>${f === "removed" ? "No screening you follow has been cancelled or moved." : "Screenings appear here as Filament discovers them."}</p></div>`}
   </div>`;
@@ -461,6 +570,7 @@ function openVenueSheet() {
           <span class="switch"><input type="checkbox" data-action="venue-toggle" value="${h(slug)}" ${vs.includes(slug) ? "checked" : ""} aria-label="${h(name)}"><span></span></span></label>`).join("")}</div>
         <div class="actions" style="margin-top:16px"><button class="btn btn--brass" data-action="close-sheet">Done</button></div></div>
     </div>`;
+  dragToDismiss(sheetRoot.querySelector(".sheet"));
 }
 function saveFilters(fn, okText) {
   return saveSettings((s) => {
@@ -513,6 +623,10 @@ function viewSettings() {
     <div class="group"><div class="row"><div class="row__main"><div class="row__title">Theme</div></div>
       <div class="seg">${[["system", "Automatic"], ["evening", "Evening"], ["daylight", "Daylight"]].map(([k, l]) => `<button data-action="theme" data-t="${k}" aria-pressed="${theme === k}">${l}</button>`).join("")}</div></div></div>
 
+    <div class="group"><div class="row"><div class="row__main"><div class="row__title">App icon</div>
+      <div class="row__sub">Used when you add Filament to your Home Screen (re-add it to change)</div></div>
+      <div class="icon-picks">${[["lamp", "Lamp"], ["plywood", "Plywood"], ["gilt", "Gilt"]].map(([k, l]) => `<button class="icon-pick" data-action="app-icon" data-v="${k}" aria-pressed="${appIcon() === k}" aria-label="${l} icon"><img src="${k === "lamp" ? "icon.svg" : `icon-${k}.svg`}" alt=""><span>${l}</span></button>`).join("")}</div></div></div>
+
     <div class="group-label">This device</div>
     <div class="group">
       <div class="row"><div class="row__main"><div class="row__title">Connected to</div><div class="row__sub">${h(state.src?.label || "")}</div></div>
@@ -537,7 +651,7 @@ function welcome(errMsg) {
       ${feat("02", "See what’s playing", "Every upcoming NYC screening of what you follow, with venue, date, showtimes and format.")}
       ${feat("03", "Get told first", "One email when something new is scheduled, moved or cancelled. Never the same news twice.")}
     </ol>
-    ${wire}
+    ${wireEl()}
     <h2 class="welcome__signin">Open your Filament</h2>
     ${errMsg ? `<p class="error-text">${h(errMsg)}</p>` : ""}
     <form id="connect">
@@ -571,21 +685,23 @@ function render() {
   app.innerHTML = `
     <aside class="rail">
       <a class="wordmark" href="#" data-action="nav" data-view="upcoming">${lamp(lampState)}<span class="wordmark__type">Filament</span></a>
-      ${wire}
-      <nav class="nav" aria-label="Sections">${NAV.map(([k, l, i]) => `<button class="nav__item" data-action="nav" data-view="${k}" ${state.view === k ? 'aria-current="page"' : ""}>${i}<span>${l}</span><span class="nav__count">${counts[k] ?? ""}</span></button>`).join("")}</nav>
+      ${wireEl()}
+      <nav class="nav" aria-label="Sections" style="--i:${NAV.findIndex(([k]) => k === (state.prevView || state.view))}"><span class="nav-pill" aria-hidden="true"></span>${NAV.map(([k, l, i]) => `<button class="nav__item" data-action="nav" data-view="${k}" ${state.view === k ? 'aria-current="page"' : ""}>${i}<span>${l}</span><span class="nav__count">${counts[k] ?? ""}</span></button>`).join("")}</nav>
       <div class="rail__foot">Watching New York’s screening calendar.<br>${state.data ? `Next check ${h(fmtWhen(nextCheckISO()))}.` : ""}</div>
     </aside>
-    <main class="main" id="main">
-      <div class="mobile-top"><span class="wordmark">${lamp(lampState)}<span class="wordmark__type">Filament</span></span>
+    <main class="main${state.enter ? " main--enter" : ""}" id="main">
+      <div class="topbar"><span class="wordmark">${lamp(lampState)}<span class="wordmark__type">Filament</span></span>
+        <span class="topbar__title" aria-hidden="true">${h({ upcoming: state.find.trim().length >= 2 ? "Is it playing?" : "Upcoming", watch: "Watchlist", archive: "Archive", settings: "Settings" }[state.view])}</span>
         <button class="icon-btn" data-action="reload" aria-label="Refresh">${ICON.refresh}</button></div>
       ${state.error ? `<div class="console__error" style="margin:0 0 18px">${h(state.error)}</div>` : ""}
       ${view}
     </main>
-    <nav class="tabbar" aria-label="Sections">${NAV.map(([k, l, i]) => `<button class="tab" data-action="nav" data-view="${k}" ${state.view === k ? 'aria-current="page"' : ""}>${i}<span>${l}</span></button>`).join("")}</nav>`;
+    <nav class="tabbar" aria-label="Sections" style="--i:${NAV.findIndex(([k]) => k === (state.prevView || state.view))}"><span class="tab-pill" aria-hidden="true"></span>${NAV.map(([k, l, i]) => `<button class="tab" data-action="nav" data-view="${k}" ${state.view === k ? 'aria-current="page"' : ""}>${i}<span>${l}</span></button>`).join("")}</nav>`;
   if (active) {
     const el = document.getElementById(active);
     if (el) { el.focus(); try { el.setSelectionRange(caret, caret); } catch { /* not a text input */ } }
   }
+  afterRender();
 }
 
 /* --------------------------------------------------------- the sheet */
@@ -604,15 +720,17 @@ const EVENT_TEXT = {
 function openSheet(key) {
   const d = findItem(key);
   if (!d) return;
-  const reasons = d.reasons || matchOccurrence(d, settings());
+  const reasons = d.reasons || matchOccurrence(d, interests());
   const facts = [
     ["Date", fmtDay(d.date, { weekday: "long", month: "long", day: "numeric", year: "numeric" })],
     ["Showtimes", (d.showtimes || []).join(", ") || "Time TBA"],
+    endsAt(d) ? ["Ends", endsAt(d)] : null,
     ["Venue", d.venue], d.series ? ["Series", d.series] : null,
     ...d.films.flatMap((f, i) => [[d.films.length > 1 ? `Film ${i + 1}` : "Director", d.films.length > 1 ? `${f.title} — ${directorsOf(f)}` : directorsOf(f) || "Not listed"],
       f.format ? ["Format", f.format] : null, f.runtime ? ["Runtime", `${f.runtime} minutes`] : null]),
     d.notes?.length ? ["Notes", d.notes.join(" · ")] : null,
-    reasons.length ? ["Why", [...new Set(reasons.map((r) => r.kind === "film" ? `You follow “${r.label}”` : `You follow ${r.label}`))].join("; ")] : null,
+    reasons.length ? ["Why", [...new Set(reasons.map((r) => r.kind === "letterboxd" ? r.label : r.kind === "film" ? `You follow “${r.label}”` : `You follow ${r.label}`))].join("; ")] : null,
+    ...(reasons.some((r) => r.kind === "letterboxd") ? [] : d.films.map((f) => lookup(lbData(), f)).filter((r) => r && (r.w || r.wl)).slice(0, 1).map((r) => ["Letterboxd", r.r ? `You rated it ${stars(r.r)}` : r.w ? "You’ve seen it" : "On your watchlist"])),
   ].filter(Boolean);
   const evs = (d.events || []).slice().reverse();
   sheetRoot.innerHTML = `<div class="scrim" data-action="close-sheet"></div>
@@ -632,19 +750,30 @@ function openSheet(key) {
         <a class="btn btn--brass" href="${h(d.listing_url)}" target="_blank" rel="noopener">View listing</a>
         ${d.film_url ? `<a class="btn" href="${h(d.film_url)}" target="_blank" rel="noopener">Film page</a>` : ""}
         ${d.ticket_url ? `<a class="btn" href="${h(d.ticket_url)}" target="_blank" rel="noopener">Tickets</a>` : ""}
+        <a class="btn" href="https://maps.apple.com/?q=${encodeURIComponent(`${d.venue}, New York, NY`)}" target="_blank" rel="noopener">Directions</a>
+        <a class="btn" href="${h(letterboxdURL(d.films[0]))}" target="_blank" rel="noopener">Letterboxd</a>
+        <button class="btn" data-action="share" data-key="${h(d.key)}">${ICON.share} Share</button>
       </div></div>
       <div class="sheet__section"><div class="group-label" style="margin-top:0">Add to Calendar</div><div class="actions">
         ${(d.showtimes?.length ? d.showtimes : [null]).map((t) => `<button class="btn btn--sm" data-action="ics" data-key="${h(d.key)}" data-time="${h(t || "")}">${ICON.calendar} ${t ? h(t) : "Add (time TBA)"}</button>`).join("")}
       </div></div>
       <div class="sheet__section"><div class="group-label" style="margin-top:0">Follow</div><div class="actions">${followButtons(d.films)}</div></div>
-      ${evs.length || d.discovered_at ? `<div class="sheet__section">${wire}<div class="group-label" style="margin-top:14px">History</div><ul class="timeline">
+      ${evs.length || d.discovered_at ? `<div class="sheet__section">${wireEl()}<div class="group-label" style="margin-top:14px">History</div><ul class="timeline">
         ${evs.map((e) => `<li>${h((EVENT_TEXT[e.kind] || (() => e.kind))(e))}<time>${h(fmtWhen(e.at))}</time></li>`).join("")}
         ${d.first_listed ? `<li>First listed<time>${h(fmtWhen(d.first_listed))}</time></li>` : ""}</ul></div>` : ""}
     </div>`;
   sheetRoot.querySelector(".sheet__close").focus();
   sheetRoot.dataset.key = key;
+  dragToDismiss(sheetRoot.querySelector(".sheet"));
 }
-const closeSheet = () => { sheetRoot.innerHTML = ""; delete sheetRoot.dataset.key; };
+function closeSheet() {
+  const sh = sheetRoot.querySelector(".sheet");
+  delete sheetRoot.dataset.key;
+  if (!sh || reducedMotion()) { sheetRoot.innerHTML = ""; return; }
+  sh.classList.add("sheet--out");
+  sheetRoot.querySelector(".scrim")?.classList.add("scrim--out");
+  setTimeout(() => { if (!sheetRoot.dataset.key) sheetRoot.innerHTML = ""; }, 260);
+}
 
 /* ------------------------------------------------- add to calendar (.ics) */
 function nyToUTC(dateIso, hh, mm) {
@@ -684,6 +813,60 @@ function downloadICS(d, time) {
   setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
 }
 
+/** "around 11:30 PM" for each showtime, from the runtime. */
+function endsAt(d) {
+  const mins = d.films.reduce((a, f) => a + (f.runtime || 0), 0);
+  if (!mins || !d.showtimes?.length) return "";
+  const fmt = (t) => {
+    const m = /^(\d+):(\d+)(AM|PM)$/.exec(t);
+    if (!m) return null;
+    const start = ((+m[1] % 12) + (m[3] === "PM" ? 12 : 0)) * 60 + +m[2];
+    const e = (Math.round((start + mins) / 5) * 5) % 1440;   // "around": nearest 5 minutes
+    return `${((Math.floor(e / 60) + 11) % 12) + 1}:${String(e % 60).padStart(2, "0")} ${e < 720 ? "AM" : "PM"}`;
+  };
+  const ends = d.showtimes.slice(0, 4).map(fmt).filter(Boolean);
+  if (!ends.length) return "";
+  return ends.length === 1 ? `Around ${ends[0]}` : d.showtimes.slice(0, ends.length).map((t, i) => `${ends[i]} (${t} show)`).join(" · ");
+}
+function letterboxdURL(f) {
+  const rec = lookup(lbData(), f);
+  if (rec?.tmdb) return `https://letterboxd.com/tmdb/${rec.tmdb}/`;
+  return `https://letterboxd.com/search/films/${encodeURIComponent(`${f.title}${f.year ? ` ${f.year}` : ""}`)}/`;
+}
+
+/* ------------------------------------------------------------- share */
+async function shareScreening(d) {
+  const title = d.films.map((f) => f.title).join(" + ");
+  const f0 = d.films[0];
+  const when = `${fmtDay(d.date, { weekday: "long", month: "long", day: "numeric" })}${d.showtimes?.length ? ` at ${d.showtimes.join(", ")}` : ""}`;
+  const text = `${title}${f0.year || directorsOf(f0) ? ` (${[directorsOf(f0), f0.year].filter(Boolean).join(", ")})` : ""} — ${when} at ${d.venue}`;
+  const url = d.ticket_url || d.listing_url;   // the theater's ticket page when there is one
+  if (navigator.share) {
+    try { await navigator.share({ title, text, url }); } catch (e) { if (e.name !== "AbortError") toast("Couldn’t open sharing"); }
+    return;
+  }
+  try { await navigator.clipboard.writeText(`${text}\nTickets: ${url}`); toast("Copied — paste it anywhere"); }
+  catch { toast("Couldn’t copy"); }
+}
+
+/* ---------------------------------------------------- Letterboxd import */
+async function importLetterboxd(file) {
+  toast("Reading your Letterboxd export…");
+  try {
+    const { data, username } = await importExport(file, lbData());
+    const films = Object.values(data.films);
+    await state.src.writeFile("letterboxd.json", data, "Import Letterboxd export");
+    state.data = { ...state.data, letterboxd: data };
+    await saveSettings((s) => {
+      s.letterboxd = { min_rating: 4.5, include_watchlist: false, sync_rss: true, ...(s.letterboxd || {}), enabled: true, ...(username ? { username } : {}) };
+    }, "Letterboxd settings");
+    const n = followList(data, lbCfg()).length;
+    toast(`Imported ${films.length} films · following ${n}. Directors are filled in at the next check.`);
+  } catch (e) {
+    toast(e.message || "Couldn’t read that file");
+  }
+}
+
 /* ------------------------------------------------------- one-tap follow */
 async function followDirector(name, tmdb, slug) {
   toast(`Adding ${name}…`);
@@ -701,6 +884,212 @@ async function followFilm(f) {
     directors: (f.directors || []).map((x) => x.name), aka: [], added: todayISO(), enabled: true }, "films");
 }
 const reopenSheet = () => { if (sheetRoot.dataset.key) openSheet(sheetRoot.dataset.key); };
+
+/* ------------------------------------------------- motion & small joys */
+const reducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+function transition(fn) {
+  if (document.startViewTransition && !reducedMotion()) document.startViewTransition(fn);
+  else fn();
+}
+
+function afterRender() {
+  // slide the tab/rail indicator from the previous section to the current one
+  const idx = NAV.findIndex(([k]) => k === state.view);
+  if (state.prevView) {
+    requestAnimationFrame(() => document.querySelectorAll(".tabbar, .nav").forEach((n) => n.style.setProperty("--i", idx)));
+    state.prevView = null;
+  }
+  if (state.enter) setTimeout(() => { state.enter = false; }, 0);
+  // collapse the big title into the top bar on scroll (iOS large titles)
+  const title = document.querySelector(".page-title");
+  if (title && "IntersectionObserver" in window) {
+    titleObserver?.disconnect();
+    titleObserver = new IntersectionObserver(([e]) => document.body.classList.toggle("title-hidden", !e.isIntersecting), { rootMargin: "-56px 0px 0px 0px" });
+    titleObserver.observe(title);
+  }
+  bindSwipes();
+}
+let titleObserver = null;
+
+// The lamp: a tap makes the filament stutter; a long press blows the bulb.
+function flicker(target) {
+  if (reducedMotion()) return;
+  (target ? [target] : document.querySelectorAll(".lamp")).forEach((l) => {
+    l.classList.remove("lamp--flicker"); void l.offsetWidth; l.classList.add("lamp--flicker");
+    setTimeout(() => l.classList.remove("lamp--flicker"), 1500);
+  });
+}
+function surge() {
+  if (reducedMotion()) return;
+  document.querySelectorAll(".lamp").forEach((l) => { l.classList.add("lamp--surge"); setTimeout(() => l.classList.remove("lamp--surge"), 1300); });
+}
+function particles(x, y, kind, n) {
+  for (let i = 0; i < n; i++) {
+    const p = document.createElement("span");
+    p.className = kind;
+    p.style.left = `${x}px`; p.style.top = `${y}px`;
+    p.style.setProperty("--a", `${(360 / n) * i + Math.random() * 20}deg`);
+    p.style.setProperty("--d", `${i * 90}ms`);
+    p.style.setProperty("--x", `${(Math.random() - 0.5) * 50}px`);
+    document.body.append(p);
+    setTimeout(() => p.remove(), 2400);
+  }
+}
+function blowLamp(l) {
+  if (reducedMotion()) return;
+  const r = l.getBoundingClientRect();
+  const cx = r.left + r.width / 2, cy = r.top + r.height * 0.42;
+  particles(cx, cy, "spark", 9);
+  particles(cx, cy - 6, "smoke", 4);
+  l.classList.add("lamp--dead");
+  setTimeout(() => { l.classList.remove("lamp--dead"); flicker(l); }, 1900);
+}
+let pressTimer = 0;
+document.addEventListener("pointerdown", (ev) => {
+  const l = ev.target.closest(".lamp");
+  if (!l) return;
+  pressTimer = setTimeout(() => { pressTimer = -1; blowLamp(l); }, 650);
+});
+document.addEventListener("pointerup", (ev) => {
+  const l = ev.target.closest(".lamp");
+  if (pressTimer > 0) { clearTimeout(pressTimer); if (l) flicker(l); }
+  pressTimer = 0;
+});
+document.addEventListener("pointercancel", () => { clearTimeout(pressTimer); pressTimer = 0; });
+
+// Removing something: it dissolves into a curl of smoke.
+function smokeOut(el) {
+  if (!el || reducedMotion()) return Promise.resolve();
+  const r = el.getBoundingClientRect();
+  particles(r.left + r.width / 2, r.top + r.height / 2, "smoke smoke--big", 5);
+  el.classList.add("smoke-out");
+  return new Promise((res) => setTimeout(res, 520));
+}
+
+// Three things to type into "Is it playing?"
+let lastSecret = "";
+function secretSearch(q) {
+  const k = fold(q).replace(/[^a-z ]/g, "").replace(/\s+/g, " ").trim();
+  if (k === lastSecret) return;
+  lastSecret = k;
+  if (k === "damn fine coffee" || k === "damn fine cup of coffee") { flicker(); toast("And hot."); }
+  else if (k === "the owls are not what they seem") {
+    flicker();
+    if (!reducedMotion()) { document.body.classList.add("owls"); setTimeout(() => document.body.classList.remove("owls"), 3200); }
+  } else if (k === "fire walk with me") {
+    flicker();
+    if (!reducedMotion()) {
+      const floor = document.createElement("div");
+      floor.className = "zigzag";
+      document.body.append(floor);
+      setTimeout(() => floor.remove(), 4200);
+    }
+  }
+}
+
+// Sheets follow your finger down and close past a threshold.
+function dragToDismiss(sheet) {
+  if (!sheet) return;
+  let y0 = null, dy = 0, t0 = 0;
+  sheet.addEventListener("touchstart", (e) => {
+    if (sheet.scrollTop > 0) return;
+    y0 = e.touches[0].clientY; dy = 0; t0 = Date.now();
+    sheet.style.transition = "none";
+  }, { passive: true });
+  sheet.addEventListener("touchmove", (e) => {
+    if (y0 === null) return;
+    dy = Math.max(0, e.touches[0].clientY - y0);
+    if (dy > 0) { e.preventDefault(); sheet.style.transform = `translateY(${dy}px)`; }
+  }, { passive: false });
+  sheet.addEventListener("touchend", () => {
+    if (y0 === null) return;
+    const fast = dy / Math.max(1, Date.now() - t0) > 0.6;
+    sheet.style.transition = "";
+    if (dy > 120 || (fast && dy > 40)) { sheet.style.transform = ""; closeSheet(); }
+    else sheet.style.transform = "";
+    y0 = null;
+  });
+}
+
+// Swipe a watchlist row to the left to remove it.
+function bindSwipes() {
+  document.querySelectorAll(".swipe").forEach((w) => {
+    if (w.dataset.bound) return;
+    w.dataset.bound = "1";
+    const card = w.lastElementChild;
+    let x0 = null, y0 = 0, dx = 0, locked = null;
+    w.addEventListener("touchstart", (e) => { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; dx = 0; locked = null; card.style.transition = "none"; }, { passive: true });
+    w.addEventListener("touchmove", (e) => {
+      if (x0 === null) return;
+      const mx = e.touches[0].clientX - x0, my = e.touches[0].clientY - y0;
+      if (locked === null && Math.abs(mx) + Math.abs(my) > 8) locked = Math.abs(mx) > Math.abs(my) ? "x" : "y";
+      if (locked !== "x") return;
+      e.preventDefault();
+      dx = Math.min(0, mx);
+      card.style.transform = `translateX(${dx < -120 ? -120 + (dx + 120) * 0.35 : dx}px)`;
+      w.classList.toggle("swipe--armed", dx < -110);
+    }, { passive: false });
+    w.addEventListener("touchend", async () => {
+      card.style.transition = "";
+      const go = dx < -110;
+      w.classList.remove("swipe--armed");
+      x0 = null;
+      if (!go) { card.style.transform = ""; return; }
+      card.style.transform = "translateX(-110%)";
+      const kind = w.dataset.swipeKind, id = w.dataset.swipeId;
+      const item = settings()[kind].find((x) => x.id === id);
+      if (!item) return;
+      await new Promise((r) => setTimeout(r, 180));
+      await saveSettings((s) => { s[kind] = s[kind].filter((x) => x.id !== id); }, `Stop following ${item.name || item.title}`);
+      toast(`Stopped following ${item.name || item.title}`, { label: "Undo", run: () => saveSettings((s) => { if (!s[kind].some((x) => x.id === id)) s[kind].push(item); }, `Follow ${item.name || item.title}`) });
+    });
+  });
+}
+
+// Pull down on Upcoming to refresh; the lamp warms up as you pull.
+(function pullToRefresh() {
+  let y0 = null, dy = 0;
+  const ind = document.createElement("div");
+  ind.className = "ptr";
+  ind.innerHTML = lamp("on");
+  document.body.append(ind);
+  addEventListener("touchstart", (e) => {
+    if (window.scrollY > 0 || sheetRoot.innerHTML || state.view !== "upcoming" || !state.src) { y0 = null; return; }
+    y0 = e.touches[0].clientY; dy = 0;
+  }, { passive: true });
+  addEventListener("touchmove", (e) => {
+    if (y0 === null) return;
+    dy = e.touches[0].clientY - y0;
+    if (dy <= 0) { ind.style.cssText = ""; return; }
+    const p = Math.min(1, dy / 110);
+    ind.style.opacity = String(p);
+    ind.style.transform = `translate(-50%, ${Math.min(dy, 130) * 0.6}px) scale(${0.6 + p * 0.4})`;
+    ind.classList.toggle("ptr--ready", p >= 1);
+  }, { passive: true });
+  addEventListener("touchend", () => {
+    if (y0 === null) return;
+    const ready = dy >= 110;
+    y0 = null;
+    if (!ready) { ind.style.cssText = ""; ind.classList.remove("ptr--ready"); return; }
+    ind.classList.add("ptr--spin");
+    refresh(true).then(() => { surge(); ind.classList.remove("ptr--spin", "ptr--ready"); ind.style.cssText = ""; });
+  });
+})();
+
+// Alternate app icons (picked up when added to the Home Screen).
+function appIcon() { try { return localStorage.getItem("filament.icon") || "lamp"; } catch { return "lamp"; } }
+function setAppIcon(k) {
+  try { localStorage.setItem("filament.icon", k); } catch { /* ignore */ }
+  applyAppIcon();
+  toast(k === "lamp" ? "Lamp icon" : `${k[0].toUpperCase()}${k.slice(1)} icon — re-add Filament to your Home Screen to see it`);
+}
+function applyAppIcon() {
+  const k = appIcon();
+  document.querySelector('link[rel="apple-touch-icon"]')?.setAttribute("href", k === "lamp" ? "icon-180.png" : `icon-${k}-180.png`);
+  document.querySelector('link[rel="icon"]')?.setAttribute("href", k === "lamp" ? "icon.svg" : `icon-${k}.svg`);
+}
+applyAppIcon();
 
 /* ----------------------------------------------------------- actions */
 async function refresh(quiet) {
@@ -731,6 +1120,7 @@ async function pollRun() {
   polling = false;
   state.running = false;
   await refresh(true);
+  surge();
   toast("Check finished");
 }
 
@@ -783,12 +1173,21 @@ async function addInterest(entry, kind) {
 
 async function onAction(el, ev) {
   const a = el.dataset.action;
-  if (a === "nav") { ev.preventDefault(); state.view = el.dataset.view; state.query = ""; state.results = null; render(); window.scrollTo({ top: 0 }); return; }
+  if (a === "nav") {
+    ev.preventDefault();
+    if (el.classList.contains("wordmark") || el.closest(".wordmark")) flicker();
+    if (state.view === el.dataset.view) { window.scrollTo({ top: 0, behavior: "smooth" }); return; }
+    state.prevView = state.view;
+    state.view = el.dataset.view; state.query = ""; state.results = null; state.enter = true;
+    transition(() => { render(); window.scrollTo({ top: 0 }); });
+    return;
+  }
   if (a === "open") return openSheet(el.dataset.key);
   if (a === "close-sheet") return closeSheet();
   if (a === "reload") return refresh();
-  if (a === "tab") { state.watchTab = el.dataset.tab; state.query = ""; state.results = null; return render(); }
+  if (a === "tab") { state.watchTab = el.dataset.tab; state.query = ""; state.results = null; state.enter = true; return transition(render); }
   if (a === "afilter") { state.archiveFilter = el.dataset.f; return render(); }
+  if (a === "app-icon") { setAppIcon(el.dataset.v); return render(); }
   if (a === "theme") { try { localStorage.setItem("filament.theme", el.dataset.t); } catch { /* ignore */ } applyTheme(); return render(); }
   if (a === "check") {
     try { await state.src.dispatch("check-now"); state.running = true; render(); toast("Checking today’s listings — about three minutes"); pollRun(); }
@@ -801,6 +1200,12 @@ async function onAction(el, ev) {
     return;
   }
   if (a === "find-clear") { state.find = ""; return render(); }
+  if (a === "share") { const d = findItem(el.dataset.key); if (d) shareScreening(d); return; }
+  if (a === "lb-min") return saveSettings((s) => { s.letterboxd = { ...(s.letterboxd || {}), min_rating: Number(el.dataset.v) }; }, "Letterboxd: change rating threshold", `Following films rated ${stars(Number(el.dataset.v))}${Number(el.dataset.v) < 5 ? " and up" : ""}`);
+  if (a === "lb-off") {
+    if (!confirm("Stop following films from Letterboxd? Your imported data stays saved, and you can turn it back on any time.")) return;
+    return saveSettings((s) => { s.letterboxd = { ...(s.letterboxd || {}), enabled: false }; }, "Letterboxd: turn off", "Letterboxd turned off");
+  }
   if (a === "ics") { const d = findItem(el.dataset.key); if (d) { downloadICS(d, el.dataset.time); toast("Calendar event created — open it to add to Calendar"); } return; }
   if (a === "follow-dir") return followDirector(el.dataset.name, el.dataset.tmdb ? Number(el.dataset.tmdb) : null, el.dataset.slug || null);
   if (a === "follow-film") { const f = filmIndex.get(el.dataset.fk); if (f) await followFilm(f); return; }
@@ -824,6 +1229,7 @@ async function onAction(el, ev) {
     const kind = el.dataset.kind, id = el.dataset.id;
     const item = settings()[kind].find((x) => x.id === id);
     if (!item) return;
+    await smokeOut(el.closest(".swipe, .interest, .row"));
     await saveSettings((s) => { s[kind] = s[kind].filter((x) => x.id !== id); }, `Stop following ${item.name || item.title}`);
     toast(`Stopped following ${item.name || item.title}`, { label: "Undo", run: () => saveSettings((s) => { if (!s[kind].some((x) => x.id === id)) s[kind].push(item); }, `Follow ${item.name || item.title}`) });
     return;
@@ -861,7 +1267,7 @@ async function onAction(el, ev) {
       let filmography = [];
       try { filmography = await filmographyFor(x.qid); } catch { /* still useful without it */ }
       const years = x.born ? `${x.born}–${x.died || ""}` : undefined;
-      await addInterest({ id: uid("dir", x.name), name: x.name, tmdb: x.tmdb, slug: slugFromCatalog(D().catalog, x.tmdb, x.name), wikidata: x.qid, aka: x.aka, years, filmography, added: todayISO(), enabled: true }, "directors");
+      await addInterest({ id: uid("dir", x.name), name: x.name, tmdb: x.tmdb, slug: slugFromCatalog(D().catalog, x.tmdb, x.name), wikidata: x.qid, aka: x.aka, years, filmography, photo: x.photo || null, added: todayISO(), enabled: true }, "directors");
     } else {
       await addInterest({ id: uid("film", x.title), title: x.title, year: x.year, directors: x.directors, aka: x.aka, wikidata: x.qid, added: todayISO(), enabled: true }, "films");
     }
@@ -888,6 +1294,11 @@ document.addEventListener("change", (ev) => {
     next[i] = v;
     saveSettings((s) => { s.schedule = s.schedule || { timezone: TZ }; const t = [...(s.schedule.times || ["09:00"])]; t[i] = v; s.schedule.times = t; },
       "Change check times", `Checks at ${next.map(fmtTime12).join(" and ")}`);
+  } else if (el.dataset.action === "lb-set") {
+    const k = el.dataset.key, on = el.checked;
+    saveSettings((s) => { s.letterboxd = { ...(s.letterboxd || {}), [k]: on }; }, "Letterboxd settings", "Saved");
+  } else if (el.dataset.action === "lb-import" && el.files?.[0]) {
+    importLetterboxd(el.files[0]);
   } else if (el.dataset.action === "venue-toggle") {
     const v = el.value, on = el.checked;
     saveFilters((f) => { f.venues = on ? [...new Set([...f.venues, v])] : f.venues.filter((x) => x !== v); });
@@ -900,7 +1311,7 @@ document.addEventListener("change", (ev) => {
 document.addEventListener("input", (ev) => {
   if (ev.target.id === "q") runSearch(ev.target.value);
   if (ev.target.id === "aq") { state.archiveQuery = ev.target.value; render(); }
-  if (ev.target.id === "find") { state.find = ev.target.value; render(); }
+  if (ev.target.id === "find") { state.find = ev.target.value; render(); secretSearch(state.find); }
 });
 document.addEventListener("keydown", (ev) => {
   if (ev.key === "Escape") {

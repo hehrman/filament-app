@@ -86,6 +86,10 @@ export function matchOccurrence(occ, settings) {
       const why = matchFilm(film, f);
       if (why) out.push({ kind: why, interest: f.id, label: f.title, film: film.title });
     }
+    // films followed automatically from Letterboxd (see letterboxd.js followList)
+    for (const f of settings._letterboxd || []) {
+      if (matchFilm(film, f)) out.push({ kind: "letterboxd", interest: f.id, label: f.label, film: film.title });
+    }
   }
   return out;
 }

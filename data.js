@@ -10,7 +10,7 @@
 const API = "https://api.github.com";
 const CFG_KEY = "filament.connection.v1";
 const CACHE_KEY = "filament.cache.v1";
-const FILES = ["settings.json", "status.json", "history.json", "listings.json", "catalog.json"];
+const FILES = ["settings.json", "status.json", "history.json", "listings.json", "catalog.json", "letterboxd.json", "people.json"];
 
 const safe = {
   get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
@@ -98,6 +98,18 @@ class GitHubSource {
     return r.content.sha;
   }
 
+  /** Create or replace any data file (used for letterboxd.json). */
+  async writeFile(name, obj, message) {
+    let sha;
+    try {
+      const r = await (await this.req(`/repos/${this.owner}/${this.repo}/contents/data/${name}?ref=${this.branch}`)).json();
+      sha = r.sha;
+    } catch (e) { if (e.status !== 404) throw e; }
+    const body = { message, content: b64encode(JSON.stringify(obj) + "\n"), branch: this.branch, ...(sha ? { sha } : {}) };
+    await this.req(`/repos/${this.owner}/${this.repo}/contents/data/${name}`, {
+      method: "PUT", body: JSON.stringify(body), headers: { "Content-Type": "application/json" } });
+  }
+
   async dispatch(mode = "check-now") {
     await this.req(`/repos/${this.owner}/${this.repo}/actions/workflows/scan.yml/dispatches`, {
       method: "POST", body: JSON.stringify({ ref: this.branch, inputs: { mode } }),
@@ -123,11 +135,13 @@ class LocalSource {
   async verify() { return {}; }
   async readFile(name) {
     if (name === "settings.json" && this.overlay) return this.overlay;
+    if (this.files?.[name]) return this.files[name];
     const r = await fetch(`./data/${name}`, { cache: "no-store" });
     return r.ok ? r.json() : null;
   }
   async readSettingsWithSha() { return { settings: await this.readFile("settings.json"), sha: "local" }; }
   async writeSettings(s) { this.overlay = s; safe.set("filament.local.settings", s); return "local"; }
+  async writeFile(name, obj) { this.files = { ...(this.files || {}), [name]: obj }; }
   async dispatch() { this.fakeRunUntil = Date.now() + 4000; }
   async activeRun() { return this.fakeRunUntil && Date.now() < this.fakeRunUntil ? { status: "in_progress" } : null; }
   async lastRun() { return null; }

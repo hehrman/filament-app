@@ -3,7 +3,7 @@
 //     (exact Screen Slate ids — the most reliable match).
 //  2. Wikidata (the free database behind Wikipedia): anyone, even if they have
 //     never screened in NYC, with TMDB ids, filmographies and alternate titles.
-import { fold, nameKey } from "./match.js?v=20261109191656";
+import { fold, nameKey } from "./match.js?v=20261109194837";
 
 const WD = "https://www.wikidata.org/w/api.php";
 const SPARQL = "https://query.wikidata.org/sparql";
@@ -56,6 +56,7 @@ export async function searchWikidataDirectors(query) {
     source: "wikidata", qid: e.id, name: label(e), aka: aliases(e).slice(0, 6),
     tmdb: claimStr(e, "P4985") ? Number(claimStr(e, "P4985")) : null,
     born: claimYear(e, "P569"), died: claimYear(e, "P570"),
+    photo: claimStr(e, "P18") ? `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(claimStr(e, "P18"))}?width=300` : null,
     description: e.descriptions?.en?.value || "",
   }));
 }
