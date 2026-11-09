@@ -1,10 +1,10 @@
-import { creditIsDirector, fold, matchFilm, matchOccurrence } from "./match.js";
+import { creditIsDirector, fold, matchFilm, matchOccurrence } from "./match.js?v=20261109191150";
 import {
   ApiError, cached, forgetConnection, isLocal, loadAll, loadConnection, makeSource, mutateSettings, saveConnection,
-} from "./data.js";
+} from "./data.js?v=20261109191150";
 import {
   filmographyFor, searchCatalog, searchWikidataDirectors, searchWikidataFilms, slugFromCatalog,
-} from "./search.js";
+} from "./search.js?v=20261109191150";
 
 const TZ = "America/New_York";
 const app = document.getElementById("app");
@@ -189,6 +189,16 @@ function dayGroups(items) {
     </section>`).join("");
 }
 
+function nextCheckISO() {
+  const [hh, mm] = (settings().schedule?.times?.[0] || "09:00").split(":").map(Number);
+  const now = new Date();
+  for (let add = 0; add < 3; add++) {
+    const at = nyToUTC(nyDate(new Date(now.getTime() + add * 864e5)), hh, mm);
+    if (at > now) return at.toISOString();
+  }
+  return null;
+}
+
 function consoleBlock() {
   const st = D().status || {};
   const run = st.last_run;
@@ -200,9 +210,10 @@ function consoleBlock() {
     headline = n ? `Found ${plural(n, "new screening")}` : u ? `${plural(u, "update")} to screenings you follow` : "Nothing new on Screen Slate";
   } else if (run && !run.ok) { lampState = "error"; headline = "The last check didn’t finish"; }
   if (run) meta.push(`Checked <b>${h(fmtWhen(run.finished || run.started))}</b>`);
-  if (st.next_check) meta.push(`Next check <b>${h(fmtWhen(st.next_check))}</b>`);
+  const next = nextCheckISO();
+  if (next) meta.push(`Next check <b>${h(fmtWhen(next))}</b>`);
   const ok = st.last_success;
-  if (ok?.last_date_with_listings) meta.push(`Calendar read through <b>${h(fmtDay(ok.last_date_with_listings, { month: "short", day: "numeric", year: "numeric" }))}</b>`);
+  if (ok?.last_date_with_listings) meta.push(`Listings published through <b>${h(fmtDay(ok.last_date_with_listings, { month: "short", day: "numeric", year: "numeric" }))}</b>`);
   if (ok?.total_screenings) meta.push(`${ok.total_screenings.toLocaleString()} NYC listings read`);
   let err = "";
   if (run && !run.ok && !state.running) {
@@ -262,6 +273,7 @@ function followButtons(films) {
     }
     const fk = f.slug || f.title;
     filmIndex.set(fk, f);
+    if ((f.directors || []).some(isFollowingCredit)) continue;   // already covered by a followed director
     out.push(isFollowingFilm(f)
       ? `<span class="tag tag--following">Following this film</span>`
       : `<button class="btn btn--sm" data-action="follow-film" data-fk="${h(fk)}">+ Follow “${h(f.title)}”</button>`);
@@ -286,7 +298,7 @@ function viewFind() {
       </div>
     </article>`;
   }).join("");
-  return `<div class="find-head"><span><b>${groups.length ? plural(groups.length, "film") : "Nothing"}</b> playing in New York matching “${h(q)}” · follow any of them to get alerts</span>
+  return `<div class="find-head"><span>${groups.length ? `<b>${plural(groups.length, "film")}</b> playing in New York matching “${h(q)}”` : `Nothing playing in New York matches “${h(q)}”`}</span>
       <button class="btn btn--sm btn--ghost" data-action="find-clear">Clear</button></div>
     ${groups.length ? list : `<div class="empty"><h3>Not on Screen Slate’s NYC calendar right now</h3>
       <p>Follow it and Filament will email you the moment it’s scheduled.</p>
@@ -309,7 +321,7 @@ function viewUpcoming() {
     ${state.find.trim().length >= 2
       ? `<header class="page-head"><div><div class="eyebrow">Search all of New York</div><h1 class="page-title">Is it playing?</h1><p class="page-sub">Everything on Screen Slate’s NYC calendar — not just what you follow.</p></div></header>`
       : `<header class="page-head"><div><div class="eyebrow">Screen Slate · New York</div><h1 class="page-title">Upcoming</h1><p class="page-sub">${following}</p></div></header>`}
-    <div class="search search--find">${ICON.search}<input id="find" type="search" autocomplete="off" placeholder="Is it playing? Search any film, director or theater" value="${h(state.find)}" aria-label="Search everything playing in New York"></div>
+    <div class="search search--find">${ICON.search}<input id="find" type="search" autocomplete="off" placeholder="Is it playing? Search films & directors" value="${h(state.find)}" aria-label="Search everything playing in New York"></div>
     ${state.find.trim().length >= 2 ? viewFind() : `
     ${consoleBlock()}
     ${items.length ? `${wire}<div style="height:22px"></div>` : ""}
@@ -368,7 +380,7 @@ function viewWatchlist() {
           <button class="icon-btn" data-action="remove" data-kind="films" data-id="${h(f.id)}" aria-label="Remove ${h(f.title)}">${ICON.trash}</button></div>`;
       }).join("")}</div>` : `<div class="empty"><h3>No individual films yet</h3><p>Follow a single film — like <i>Eyes Wide Shut</i> — without following its director’s whole career.</p></div>`);
   return `<div class="page">
-    <header class="page-head"><div><div class="eyebrow">What Filament looks for</div><h1 class="page-title">Watchlist</h1></div>
+    <header class="page-head"><div><div class="eyebrow">What you follow</div><h1 class="page-title">Watchlist</h1></div>
       <div class="seg" role="group" aria-label="Directors or films">
         <button data-action="tab" data-tab="directors" aria-pressed="${isDir}">Directors · ${s.directors.length}</button>
         <button data-action="tab" data-tab="films" aria-pressed="${!isDir}">Films · ${s.films.length}</button>
@@ -396,7 +408,7 @@ function viewArchive() {
     if (d.status === "moved") return `<span class="tag tag--update">Rescheduled</span>`;
     if (d.status === "missing") return `<span class="tag tag--gone">Removed</span>`;
     if (d.date < today || d.status === "past") return `<span class="tag">Screened</span>`;
-    return matchOccurrence(d, s).length ? `<span class="tag tag--new">Upcoming</span>` : `<span class="tag">Unfollowed</span>`;
+    return matchOccurrence(d, s).length ? `<span class="tag tag--soon">Upcoming</span>` : `<span class="tag">Unfollowed</span>`;
   };
   const seg = [["upcoming", "Upcoming"], ["past", "Past"], ["removed", "Removed"], ["all", "All"]]
     .map(([k, l]) => `<button data-action="afilter" data-f="${k}" aria-pressed="${f === k}">${l}</button>`).join("");
@@ -493,7 +505,7 @@ function viewSettings() {
     <p class="group-foot">Checks run on GitHub’s computers, so your Mac and iPhone can be off. Daylight saving is handled automatically, and a check that GitHub starts late is still caught. Tap <b>Check now</b> on the Upcoming page any time you want an extra look.</p>
 
     <div class="group-label">Recent checks</div>
-    <div class="group">${runs.length ? runs.map((r) => `<div class="row"><div class="row__main"><div class="row__title">${h(fmtWhen(r.started))} <span style="color:var(--text-3);font-weight:400">· ${r.trigger === "manual" ? "Check now" : "Scheduled"}</span></div>
+    <div class="group">${runs.length ? runs.map((r) => `<div class="row"><div class="row__main"><div class="row__title">${h(fmtWhen(r.started))} <span style="color:var(--text-3);font-weight:400">· ${r.trigger === "manual" ? "Manual check" : "Daily check"}</span></div>
         <div class="row__sub">${r.ok ? `${r.dates_scanned} days read · ${plural(r.matched_upcoming || 0, "upcoming match", "upcoming matches")} · ${r.new || 0} new · ${r.updated || 0} updates${r.emailed ? ` · emailed` : ""}` : h(r.error || "Failed")}</div></div>
         <span class="tag ${r.ok ? "" : "tag--gone"}">${r.ok ? "OK" : "Failed"}</span></div>`).join("") : `<div class="row"><div class="row__main row__sub">No checks yet.</div></div>`}</div>
 
@@ -559,7 +571,7 @@ function render() {
       <a class="wordmark" href="#" data-action="nav" data-view="upcoming">${lamp(lampState)}<span class="wordmark__type">Filament</span></a>
       ${wire}
       <nav class="nav" aria-label="Sections">${NAV.map(([k, l, i]) => `<button class="nav__item" data-action="nav" data-view="${k}" ${state.view === k ? 'aria-current="page"' : ""}>${i}<span>${l}</span><span class="nav__count">${counts[k] ?? ""}</span></button>`).join("")}</nav>
-      <div class="rail__foot">Watching Screen Slate’s NYC calendar.<br>${st.next_check ? `Next check ${h(fmtWhen(st.next_check))}.` : ""}</div>
+      <div class="rail__foot">Watching Screen Slate’s NYC calendar.<br>${state.data ? `Next check ${h(fmtWhen(nextCheckISO()))}.` : ""}</div>
     </aside>
     <main class="main" id="main">
       <div class="mobile-top"><span class="wordmark">${lamp(lampState)}<span class="wordmark__type">Filament</span></span>
@@ -607,8 +619,8 @@ function openSheet(key) {
       <div class="console__gilt gilt" style="height:5px;margin:10px 26px 0;border-radius:3px"></div>
       <div class="sheet__hero">
         <button class="icon-btn sheet__close" data-action="close-sheet" aria-label="Close">${ICON.close}</button>
-        <div class="eyebrow">${h(relDay(d.date) || fmtDay(d.date, { weekday: "long" }))} · ${h(d.venue)}</div>
         <div class="sheet__head">${posterImg(d.poster, "sheet__poster")}<div>
+        <div class="eyebrow">${h(relDay(d.date) || fmtDay(d.date, { weekday: "long" }))} · ${h(d.venue)}</div>
         <h2 class="sheet__title" id="sheet-title">${h(d.films.map((f) => f.title).join(" + "))}</h2>
         <div class="card__meta">${h(d.films.map((f) => [directorsOf(f), f.year].filter(Boolean).join(", ")).join(" · "))}</div>
         </div></div>

@@ -448,3 +448,17 @@ details.more summary::-webkit-details-marker { display: none; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 .chip--btn { cursor: pointer; font: 600 12.5px var(--font-mono); }
 .chip--btn.chip--on { background: linear-gradient(180deg, #EED39A, #C9A15B); color: #1A140C; border-color: transparent; }
+
+/* audit fixes */
+.tag--following { text-transform: none; letter-spacing: 0; font-size: 13px; font-weight: 600; }
+.tag--soon { color: var(--brass-hi); border-color: color-mix(in srgb, var(--brass) 40%, transparent); background: none; }
+.interest__count { font: 600 13px var(--font); color: var(--brass-hi); white-space: nowrap; }
+.ledger-row { grid-template-columns: 150px 1fr auto; }
+.ledger-date { white-space: nowrap; }
+.seg button { white-space: nowrap; }
+@media (max-width: 600px) {
+  .page-head { flex-wrap: wrap; }
+  .page-head .seg { width: 100%; }
+  .page-head .seg button { flex: 1; }
+  .ledger-row { grid-template-columns: 1fr auto; }
+}
