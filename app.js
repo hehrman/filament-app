@@ -1,11 +1,11 @@
-import { creditIsDirector, fold, matchFilm, matchOccurrence } from "./match.js?v=20261109211217";
+import { creditIsDirector, fold, matchFilm, matchOccurrence } from "./match.js?v=20261109211742";
 import {
   ApiError, cached, forgetConnection, isLocal, loadAll, loadConnection, makeSource, mutateSettings, saveConnection,
-} from "./data.js?v=20261109211217";
-import { followList, forYou, importExport, lookup, lovedDirectors, recentlyWatched, stars } from "./letterboxd.js?v=20261109211217";
+} from "./data.js?v=20261109211742";
+import { followList, forYou, importExport, lookup, lovedDirectors, recentlyWatched, stars } from "./letterboxd.js?v=20261109211742";
 import {
   filmographyFor, searchCatalog, searchWikidataDirectors, searchWikidataFilms, slugFromCatalog,
-} from "./search.js?v=20261109211217";
+} from "./search.js?v=20261109211742";
 
 const TZ = "America/New_York";
 const app = document.getElementById("app");
@@ -614,6 +614,8 @@ function saveFilters(fn, okText) {
   }, "Update email filters", okText);
 }
 
+const lcDays = (n) => (n.notify_last_chance === false ? 0 : Number(n.last_chance_days ?? 2));
+
 function viewSettings() {
   const s = settings();
   const n = s.notifications || {};
@@ -634,7 +636,10 @@ function viewSettings() {
       <div class="row"><div class="row__main"><div class="row__title">New screenings</div><div class="row__sub">A film you follow appears on the calendar</div></div>${sw("notify_new", n.notify_new !== false, "New screenings")}</div>
       <div class="row"><div class="row__main"><div class="row__title">Changes</div><div class="row__sub">Rescheduled dates, new or changed showtimes</div></div>${sw("notify_changes", n.notify_changes !== false, "Changes")}</div>
       <div class="row"><div class="row__main"><div class="row__title">Cancellations</div><div class="row__sub">A screening you were told about disappears</div></div>${sw("notify_cancellations", n.notify_cancellations !== false, "Cancellations")}</div>
-      <div class="row"><div class="row__main"><div class="row__title">Last chance</div><div class="row__sub">A film you follow is down to its final NYC screening, within 2 days</div></div>${sw("notify_last_chance", n.notify_last_chance !== false, "Last chance reminders")}</div>
+      <div class="row"><div class="row__main"><div class="row__title">Last chance</div>
+        <div class="row__sub">${lcDays(n) ? `One reminder ${lcDays(n) === 7 ? "a week" : plural(lcDays(n), "day")} before a film you follow plays for the last time in New York` : "Off — no reminders before final screenings"}</div></div>
+        <div class="seg">${[[0, "Off"], [1, "1 day"], [2, "2 days"], [3, "3 days"], [7, "1 week"]].map(([v, l]) => `<button data-action="lc-days" data-v="${v}" aria-pressed="${lcDays(n) === v}">${l}</button>`).join("")}</div></div>
+      ${lcDays(n) ? `<div class="row"><div class="row__main"><div class="row__title">Also before one-off screenings</div><div class="row__sub">A single screening can be the only chance — get a reminder for those too</div></div>${sw("last_chance_one_offs", !!n.last_chance_one_offs, "Remind before one-off screenings")}</div>` : ""}
       <div class="row"><div class="row__main"><div class="row__title">Weekly digest</div><div class="row__sub">Sundays at 9 AM: everything you follow playing that week</div></div>
         <button class="btn btn--sm" data-action="digest-now">Send now</button>${sw("weekly_digest", n.weekly_digest !== false, "Weekly digest")}</div>
       <div class="row"><div class="row__main"><div class="row__title">Email service</div><div class="row__sub">${prov === "resend" ? "Resend is connected" : prov === "smtp" ? "Your mail server is connected" : "Not confirmed yet — send a test to check"}</div></div>
@@ -1517,6 +1522,11 @@ async function onAction(el, ev) {
     try { await state.src.dispatch("test-push"); toast("Test notification on its way — about a minute"); } catch (e) { toast(e.message); }
     return;
   }
+  if (a === "lc-days") {
+    const v = Number(el.dataset.v);
+    return saveSettings((s) => { s.notifications = { ...(s.notifications || {}), last_chance_days: v, notify_last_chance: v > 0 }; }, "Last chance reminders",
+      v ? `Reminders ${v === 7 ? "a week" : plural(v, "day")} before final screenings` : "Last chance reminders off");
+  }
   if (a === "digest-now") {
     try { await state.src.dispatch("digest"); toast("This week’s digest is on its way — about a minute"); }
     catch (e) { toast(e.message); }
@@ -1684,7 +1694,7 @@ function bindWelcome() {
 applyTheme();
 // Instant launch & offline: cache the app itself (never your data).
 if ("serviceWorker" in navigator && !isLocal()) {
-  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261109211217").catch(() => {}));
+  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261109211742").catch(() => {}));
 }
 // "Sign in on another device" links carry the connection in the #fragment (never sent to any server).
 (function acceptDeviceLink() {
