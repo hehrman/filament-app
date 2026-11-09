@@ -811,3 +811,20 @@ body { overscroll-behavior-y: contain; }
 
 .keybox { padding: 14px; border-radius: 12px; background: var(--surface); border: 1px dashed var(--brass); word-break: break-all; }
 .keybox code { font: 600 14px/1.5 var(--font-mono); -webkit-user-select: all; user-select: all; }
+
+/* ---- help & FAQ */
+.help-steps { margin: 4px 0 24px; }
+.faq__item + .faq__item { border-top: 1px solid var(--line); }
+.faq__item summary { list-style: none; cursor: pointer; padding: 15px 44px 15px 16px; font-weight: 600; position: relative; }
+.faq__item summary::-webkit-details-marker { display: none; }
+.faq__item summary::after { content: "+"; position: absolute; right: 18px; top: 50%; transform: translateY(-50%); color: var(--brass-hi); font: 400 22px/1 var(--font); transition: transform .35s var(--spring); }
+.faq__item[open] summary::after { transform: translateY(-50%) rotate(45deg); }
+.faq__item p { margin: 0; padding: 0 16px 16px; color: var(--text-2); line-height: 1.55; }
+.row--link { width: 100%; border: 0; background: none; text-align: left; }
+.row--link > span { color: var(--text-3); font-size: 22px; }
+.faq-welcome { margin-bottom: 6px; }
+
+.topbar__actions { display: flex; gap: 8px; }
+.rail__help { display: flex; align-items: center; gap: 8px; border: 0; background: none; padding: 0 0 12px; color: var(--text-2); font-weight: 600; font-size: 13px; }
+.rail__help svg { width: 18px; height: 18px; }
+.rail__help:hover { color: var(--text); }

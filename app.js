@@ -1,11 +1,11 @@
-import { creditIsDirector, fold, matchFilm, matchOccurrence } from "./match.js?v=20261109210744";
+import { creditIsDirector, fold, matchFilm, matchOccurrence } from "./match.js?v=20261109211217";
 import {
   ApiError, cached, forgetConnection, isLocal, loadAll, loadConnection, makeSource, mutateSettings, saveConnection,
-} from "./data.js?v=20261109210744";
-import { followList, forYou, importExport, lookup, lovedDirectors, recentlyWatched, stars } from "./letterboxd.js?v=20261109210744";
+} from "./data.js?v=20261109211217";
+import { followList, forYou, importExport, lookup, lovedDirectors, recentlyWatched, stars } from "./letterboxd.js?v=20261109211217";
 import {
   filmographyFor, searchCatalog, searchWikidataDirectors, searchWikidataFilms, slugFromCatalog,
-} from "./search.js?v=20261109210744";
+} from "./search.js?v=20261109211217";
 
 const TZ = "America/New_York";
 const app = document.getElementById("app");
@@ -61,6 +61,7 @@ const ICON = {
   trash: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h14M10 7V5h4v2M7 7l1 13h8l1-13"/></svg>`,
   calendar: `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>`,
   share: `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3.5M8 7l4-4 4 4"/><path d="M7 10H5.5A1.5 1.5 0 0 0 4 11.5v8A1.5 1.5 0 0 0 5.5 21h13a1.5 1.5 0 0 0 1.5-1.5v-8A1.5 1.5 0 0 0 18.5 10H17"/></svg>`,
+  info: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5"/><circle cx="12" cy="7.8" r=".6" fill="currentColor"/></svg>`,
   refresh: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/></svg>`,
 };
 const TURNBUCKLE = `<svg viewBox="0 0 46 12" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="6" cy="6" r="3"/><path d="M9 6h4"/><rect x="13" y="2.5" width="20" height="7" rx="3.5"/><path d="M17 6h12" stroke-dasharray="1.5 1.5"/><path d="M33 6h4"/><circle cx="40" cy="6" r="3"/></svg>`;
@@ -409,7 +410,7 @@ function viewUpcoming() {
     ${state.find.trim().length >= 2
       ? `<header class="page-head"><div><div class="eyebrow">Search all of New York</div><h1 class="page-title">Is it playing?</h1><p class="page-sub">Every screening in New York — not just what you follow.</p></div></header>`
       : `<header class="page-head"><div><div class="eyebrow">New York</div><h1 class="page-title">Upcoming</h1><p class="page-sub">${following}</p></div></header>`}
-    <div class="search search--find">${ICON.search}<input id="find" type="search" autocomplete="off" placeholder="Is it playing? Search films & directors" value="${h(state.find)}" aria-label="Search everything playing in New York"></div>
+    <div class="search search--find">${ICON.search}<input id="find" type="search" autocomplete="off" placeholder="Is it playing? Search any film" value="${h(state.find)}" aria-label="Search everything playing in New York"></div>
     ${!state.find && recentSearches().length ? `<div class="recents"><span>Recent</span>${recentSearches().map((q) => `<button class="chip chip--btn recents__q" data-action="recent" data-q="${h(q)}">${h(q)}</button>`).join("")}<button class="recents__clear" data-action="recent-clear">Clear</button></div>` : ""}
     ${state.find.trim().length >= 2 ? viewFind() : `
     ${consoleBlock()}
@@ -680,8 +681,42 @@ function viewSettings() {
         <button class="btn btn--sm" data-action="device-link">Share link</button></div>`}
     </div>
     <div class="group-label">About</div>
+    <div class="group"><button class="row row--link" data-action="nav" data-view="help"><div class="row__main"><div class="row__title">About & Help</div><div class="row__sub">How Filament works, where listings come from, privacy, FAQ</div></div><span aria-hidden="true">›</span></button></div>
+
+  </div>`;
+}
+
+const FAQ = [
+  ["What is Filament?", "A personal watch over New York’s repertory, arthouse and independent screenings. You tell it which directors and films you love; it checks the city’s screening listings every morning and tells you when one of them is scheduled."],
+  ["Where do the listings come from?", "From Screen Slate, the independent daily guide to New York’s film screenings. Filament reads its public NYC listings once a day and links back to them. It covers repertory houses, museums and arthouse cinemas — Film Forum, Metrograph, BAM, IFC, Anthology, Film at Lincoln Center, MoMA, Alamo and many more — not every multiplex."],
+  ["How often does it check?", "Every morning at 9:00 AM New York time, on GitHub’s computers — your phone and laptop can be off. “Check now” on the Upcoming page runs an extra check any time; it takes about three minutes."],
+  ["How far ahead does it look?", "As far as the listings go. It reads every published date and keeps going until there’s a long stretch with nothing scheduled, so it automatically reaches further when theaters announce further ahead."],
+  ["How does it know a film is by a director I follow?", "Each listing links its directors to a permanent ID number, so matching never depends on spelling. Individual films are matched by title (including alternate titles) and confirmed by year or director, so a remake with the same name won’t set it off."],
+  ["What does following a director do?", "Every screening of every film they directed — including ones you didn’t know about — shows up in Upcoming and in your emails. Follow a single film instead if you only care about that one."],
+  ["How does Letterboxd work here?", "Import your Letterboxd export (Watchlist → Letterboxd). Films you rated 4.5★ or higher are followed automatically, “For you” suggests other films you’d likely want, and anything you’ve logged is marked “Seen.” Each morning Filament also reads your public Letterboxd diary, so new favorites are picked up on their own."],
+  ["Why isn’t a favorite showing up?", "If you watched it in the last 4 months, Filament assumes you don’t need a reminder yet. Change or turn off that rule in Settings → Letterboxd. It may also simply not be scheduled in New York right now — try “Is it playing?” at the top of Upcoming."],
+  ["What gets stored about me?", "Only what Filament needs: the directors and films you follow, your settings, and from Letterboxd just titles, years, ratings, watch dates and your watchlist — never your email, profile or reviews. It all lives in your own private GitHub project. Your access key stays on your devices."],
+  ["Emails or notifications?", "Both, if you like. Emails group everything new from a check into one message, plus a Sunday “Playing this week” digest. Phone notifications (Settings → Phone notifications) put the same news on your lock screen."],
+  ["What will I be told about?", "New screenings of what you follow, changes (moved dates, new or changed showtimes), cancellations, and a “last chance” reminder when a film’s run is down to its final screening. Each piece of news only once. Filters in Settings can limit emails to, say, 35mm prints or certain theaters."],
+  ["Can I buy tickets here?", "No — Filament points you to each theater’s own ticket page (“Tickets”), where you buy directly from the venue."],
+  ["Does it cost anything?", "No. It runs within free allowances from GitHub (scheduling and hosting) and Resend (email)."],
+  ["The app looks out of date.", "Pull down on Upcoming to refresh. If a new version doesn’t appear, close Filament fully and reopen it — updates arrive within about ten minutes."],
+  ["I didn’t get an email.", "Check spam, then Settings → Send test email. If a check fails twice in a row, Filament emails you about that too."],
+  ["How do I put it on my iPhone?", "Open it in Safari, tap Share → Add to Home Screen. It then opens full-screen like an app, works offline, and can send notifications."],
+  ["Anything else?", "A few things are hidden. Try the lamp."],
+];
+function viewHelp() {
+  const steps = [["01", "Follow", "Add directors and films you love — or import your Letterboxd."], ["02", "Filament watches", "Every morning it reads New York’s screening listings, as far ahead as they go."], ["03", "You hear first", "An email or notification the moment something you follow is scheduled — and only once."]];
+  return `<div class="page">
+    <header class="page-head"><div><div class="eyebrow">About & Help</div><h1 class="page-title">How Filament works</h1></div>
+      <button class="btn btn--sm" data-action="help-done">Done</button></header>
+    <ol class="features help-steps">${steps.map(([n, t, d]) => `<li class="feature"><span class="feature__n">${n}</span><div><div class="feature__t">${t}</div><div class="feature__d">${d}</div></div></li>`).join("")}</ol>
+    ${wireEl()}
+    <div class="group-label">Questions</div>
+    <div class="group faq">${FAQ.map(([q, a]) => `<details class="faq__item"><summary>${h(q)}</summary><p>${h(a)}</p></details>`).join("")}</div>
+    <div class="group-label">About</div>
     <div class="group"><div class="row"><div class="row__main"><div class="row__title">Where the listings come from</div>
-      <div class="row__sub">Filament reads the public New York listings published by <a href="https://www.screenslate.com" target="_blank" rel="noopener">Screen Slate</a>, the independent daily guide to repertory, arthouse and experimental film, once a day. Listings data © Screen Slate. Film details and alternate titles come from Wikidata.</div></div></div></div>
+      <div class="row__sub">Filament reads the public New York listings published by <a href="https://www.screenslate.com" target="_blank" rel="noopener">Screen Slate</a>, the independent daily guide to repertory, arthouse and experimental film. Listings data © Screen Slate. Director and film details from Wikidata; portraits from Wikimedia Commons.</div></div></div></div>
   </div>`;
 }
 
@@ -707,6 +742,7 @@ function welcome(errMsg) {
       <label class="field"><span>Access token</span><input name="token" type="password" autocomplete="off" placeholder="github_pat_…" required></label>
       <button class="btn btn--brass" style="width:100%;height:48px" ${state.busy ? "disabled" : ""}>${state.busy ? "Opening…" : "Open Filament"}</button>
     </form>
+    <details class="steps-wrap faq-welcome"><summary>How Filament works</summary><div class="group faq" style="margin-top:12px">${FAQ.slice(0, 6).map(([q, a]) => `<details class="faq__item"><summary>${h(q)}</summary><p>${h(a)}</p></details>`).join("")}</div></details>
     <details class="steps-wrap"><summary>Where do I get an access token?</summary>
     <ol class="steps">
       <li>On github.com open <b>Settings → Developer settings → Fine-grained tokens → Generate new token</b>.</li>
@@ -718,6 +754,7 @@ function welcome(errMsg) {
 }
 
 /* ------------------------------------------------------------ render */
+const navOf = (v) => (v === "help" ? "settings" : v);
 const NAV = [["upcoming", "Upcoming", ICON.upcoming], ["watch", "Watchlist", ICON.watch], ["archive", "Archive", ICON.archive], ["settings", "Settings", ICON.settings]];
 
 function render() {
@@ -726,24 +763,24 @@ function render() {
   const lampState = state.running ? "busy" : st.last_run ? (st.last_run.ok ? "on" : "error") : "off";
   const counts = { upcoming: state.data ? upcomingItems().filter((d) => d.status === "active").length : "", watch: (settings().directors.length + settings().films.length) || "" };
   const view = state.loading && !state.data ? `<div class="page"><div class="skeleton" style="height:150px"></div><div class="skeleton"></div><div class="skeleton"></div></div>`
-    : { upcoming: viewUpcoming, watch: viewWatchlist, archive: viewArchive, settings: viewSettings }[state.view]();
+    : { upcoming: viewUpcoming, watch: viewWatchlist, archive: viewArchive, settings: viewSettings, help: viewHelp }[state.view]();
   const active = document.activeElement?.id;
   const caret = active && document.activeElement.selectionStart;
   app.innerHTML = `
     <aside class="rail">
       <a class="wordmark" href="#" data-action="nav" data-view="upcoming">${lamp(lampState)}<span class="wordmark__type">Filament</span></a>
       ${wireEl()}
-      <nav class="nav" aria-label="Sections" style="--i:${NAV.findIndex(([k]) => k === (state.prevView || state.view))}"><span class="nav-pill" aria-hidden="true"></span>${NAV.map(([k, l, i]) => `<button class="nav__item" data-action="nav" data-view="${k}" ${state.view === k ? 'aria-current="page"' : ""}>${i}<span>${l}</span><span class="nav__count">${counts[k] ?? ""}</span></button>`).join("")}</nav>
-      <div class="rail__foot">Watching New York’s screening calendar.<br>${state.data ? `Next check ${h(fmtWhen(nextCheckISO()))}.` : ""}</div>
+      <nav class="nav" aria-label="Sections" style="--i:${NAV.findIndex(([k]) => k === navOf(state.prevView || state.view))}"><span class="nav-pill" aria-hidden="true"></span>${NAV.map(([k, l, i]) => `<button class="nav__item" data-action="nav" data-view="${k}" ${navOf(state.view) === k ? 'aria-current="page"' : ""}>${i}<span>${l}</span><span class="nav__count">${counts[k] ?? ""}</span></button>`).join("")}</nav>
+      <div class="rail__foot"><button class="rail__help" data-action="nav" data-view="help">${ICON.info}<span>About & Help</span></button>Watching New York’s screening calendar.<br>${state.data ? `Next check ${h(fmtWhen(nextCheckISO()))}.` : ""}</div>
     </aside>
     <main class="main${state.enter ? " main--enter" : ""}" id="main">
       <div class="topbar"><span class="wordmark">${lamp(lampState)}<span class="wordmark__type">Filament</span></span>
-        <span class="topbar__title" aria-hidden="true">${h({ upcoming: state.find.trim().length >= 2 ? "Is it playing?" : "Upcoming", watch: "Watchlist", archive: "Archive", settings: "Settings" }[state.view])}</span>
-        <button class="icon-btn" data-action="reload" aria-label="Refresh">${ICON.refresh}</button></div>
+        <span class="topbar__title" aria-hidden="true">${h({ upcoming: state.find.trim().length >= 2 ? "Is it playing?" : "Upcoming", watch: "Watchlist", archive: "Archive", settings: "Settings", help: "About & Help" }[state.view])}</span>
+        <span class="topbar__actions"><button class="icon-btn" data-action="nav" data-view="help" aria-label="About & Help">${ICON.info}</button><button class="icon-btn" data-action="reload" aria-label="Refresh">${ICON.refresh}</button></span></div>
       ${state.error ? `<div class="console__error" style="margin:0 0 18px">${h(state.error)}</div>` : ""}
       ${view}
     </main>
-    <nav class="tabbar" aria-label="Sections" style="--i:${NAV.findIndex(([k]) => k === (state.prevView || state.view))}"><span class="tab-pill" aria-hidden="true"></span>${NAV.map(([k, l, i]) => `<button class="tab" data-action="nav" data-view="${k}" ${state.view === k ? 'aria-current="page"' : ""}>${i}<span>${l}</span></button>`).join("")}</nav>`;
+    <nav class="tabbar" aria-label="Sections" style="--i:${NAV.findIndex(([k]) => k === navOf(state.prevView || state.view))}"><span class="tab-pill" aria-hidden="true"></span>${NAV.map(([k, l, i]) => `<button class="tab" data-action="nav" data-view="${k}" ${(state.view === "help" ? "settings" : state.view) === k ? 'aria-current="page"' : ""}>${i}<span>${l}</span></button>`).join("")}</nav>`;
   if (active) {
     const el = document.getElementById(active);
     if (el) { el.focus(); try { el.setSelectionRange(caret, caret); } catch { /* not a text input */ } }
@@ -1139,7 +1176,7 @@ function transition(fn) {
 
 function afterRender() {
   // slide the tab/rail indicator from the previous section to the current one
-  const idx = NAV.findIndex(([k]) => k === state.view);
+  const idx = NAV.findIndex(([k]) => k === navOf(state.view));
   if (state.prevView) {
     requestAnimationFrame(() => document.querySelectorAll(".tabbar, .nav").forEach((n) => n.style.setProperty("--i", idx)));
     state.prevView = null;
@@ -1446,6 +1483,7 @@ async function onAction(el, ev) {
     if (el.classList.contains("wordmark") || el.closest(".wordmark")) flicker();
     if (state.view === el.dataset.view) { window.scrollTo({ top: 0, behavior: "smooth" }); return; }
     state.prevView = state.view;
+    if (el.dataset.view === "help") state.beforeHelp = state.view;
     state.view = el.dataset.view; state.query = ""; state.results = null; state.enter = true;
     transition(() => { render(); window.scrollTo({ top: 0 }); });
     return;
@@ -1470,6 +1508,7 @@ async function onAction(el, ev) {
     else { try { await navigator.clipboard.writeText(link); toast("Link copied — open it on your other device"); } catch { toast("Couldn’t copy"); } }
     return;
   }
+  if (a === "help-done") { const back = state.beforeHelp || "settings"; state.prevView = "help"; state.view = back; state.enter = true; return transition(() => { render(); window.scrollTo({ top: 0 }); }); }
   if (a === "push-setup") { ev.preventDefault(); return pushSetup(); }
   if (a === "pk-copy") { try { await navigator.clipboard.writeText(document.getElementById("pk").textContent); toast("Key copied"); } catch { toast("Select the key and copy it"); } return; }
   if (a === "push-on") return pushOn();
@@ -1645,7 +1684,7 @@ function bindWelcome() {
 applyTheme();
 // Instant launch & offline: cache the app itself (never your data).
 if ("serviceWorker" in navigator && !isLocal()) {
-  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261109210744").catch(() => {}));
+  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261109211217").catch(() => {}));
 }
 // "Sign in on another device" links carry the connection in the #fragment (never sent to any server).
 (function acceptDeviceLink() {
