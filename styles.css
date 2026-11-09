@@ -788,3 +788,23 @@ body { overscroll-behavior-y: contain; }
 .ctx button { display: block; width: 100%; text-align: left; padding: 11px 12px; border: 0; background: none; border-radius: 9px; font-size: 15px; }
 .ctx button:hover, .ctx button:focus-visible { background: var(--surface-2); }
 @media (pointer: coarse) { .ctx button { min-height: 44px; } }
+
+/* ---- tonight */
+.day__badge--today { border-color: color-mix(in srgb, var(--amber) 55%, transparent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--amber) 25%, transparent), 0 10px 30px -12px rgba(255,180,90,.45); }
+.day__badge--today .day__num { color: var(--amber); }
+
+/* ---- recent searches */
+.recents { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: -6px 0 20px; }
+.recents > span { font: 500 11px var(--font-geo); letter-spacing: .18em; text-transform: uppercase; color: var(--text-3); margin-right: 4px; }
+.recents__q { font-family: var(--font); font-weight: 500; }
+.recents__clear { border: 0; background: none; color: var(--text-3); font-size: 12.5px; margin-left: auto; }
+
+/* ---- frosted sheet header while scrolling */
+.sheet__hero { position: sticky; top: 0; z-index: 2; background: color-mix(in srgb, var(--bg-2) 82%, transparent);
+  -webkit-backdrop-filter: saturate(170%) blur(18px); backdrop-filter: saturate(170%) blur(18px); }
+
+/* ---- what's new */
+.whatsnew { list-style: none; margin: 0; padding: 0; display: grid; gap: 16px; }
+.whatsnew li { display: grid; grid-template-columns: 34px 1fr; gap: 12px; align-items: start; }
+.whatsnew b { display: block; font-size: 16px; }
+.whatsnew span { color: var(--text-2); font-size: 14px; line-height: 1.45; }

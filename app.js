@@ -1,11 +1,11 @@
-import { creditIsDirector, fold, matchFilm, matchOccurrence } from "./match.js?v=20261109202448";
+import { creditIsDirector, fold, matchFilm, matchOccurrence } from "./match.js?v=20261109210317";
 import {
   ApiError, cached, forgetConnection, isLocal, loadAll, loadConnection, makeSource, mutateSettings, saveConnection,
-} from "./data.js?v=20261109202448";
-import { followList, forYou, importExport, lookup, lovedDirectors, recentlyWatched, stars } from "./letterboxd.js?v=20261109202448";
+} from "./data.js?v=20261109210317";
+import { followList, forYou, importExport, lookup, lovedDirectors, recentlyWatched, stars } from "./letterboxd.js?v=20261109210317";
 import {
   filmographyFor, searchCatalog, searchWikidataDirectors, searchWikidataFilms, slugFromCatalog,
-} from "./search.js?v=20261109202448";
+} from "./search.js?v=20261109210317";
 
 const TZ = "America/New_York";
 const app = document.getElementById("app");
@@ -28,7 +28,7 @@ const fmtDay = (iso, opts) => new Intl.DateTimeFormat("en-US", { timeZone: "UTC"
 function daysFrom(iso) { return Math.round((dateObj(iso) - dateObj(todayISO())) / 864e5); }
 function relDay(iso) {
   const n = daysFrom(iso);
-  if (n === 0) return "Today";
+  if (n === 0) return new Date().getHours() >= 15 ? "Tonight" : "Today";
   if (n === 1) return "Tomorrow";
   if (n > 1 && n < 7) return `In ${n} days`;
   return "";
@@ -221,7 +221,7 @@ function dayGroups(items) {
   for (const it of items) { if (!byDay.has(it.date)) byDay.set(it.date, []); byDay.get(it.date).push(it); }
   return [...byDay].map(([date, its]) => `
     <section class="day" aria-label="${h(fmtDay(date, { weekday: "long", month: "long", day: "numeric" }))}">
-      <div class="day__badge">
+      <div class="day__badge${date === todayISO() ? " day__badge--today" : ""}">
         <div class="day__num">${fmtDay(date, { day: "numeric" })}</div>
         <div class="day__dow">${fmtDay(date, { weekday: "short" })}</div>
         <div class="day__mon">${fmtDay(date, { month: "long" })}</div>
@@ -410,6 +410,7 @@ function viewUpcoming() {
       ? `<header class="page-head"><div><div class="eyebrow">Search all of New York</div><h1 class="page-title">Is it playing?</h1><p class="page-sub">Every screening in New York — not just what you follow.</p></div></header>`
       : `<header class="page-head"><div><div class="eyebrow">New York</div><h1 class="page-title">Upcoming</h1><p class="page-sub">${following}</p></div></header>`}
     <div class="search search--find">${ICON.search}<input id="find" type="search" autocomplete="off" placeholder="Is it playing? Search films & directors" value="${h(state.find)}" aria-label="Search everything playing in New York"></div>
+    ${!state.find && recentSearches().length ? `<div class="recents"><span>Recent</span>${recentSearches().map((q) => `<button class="chip chip--btn recents__q" data-action="recent" data-q="${h(q)}">${h(q)}</button>`).join("")}<button class="recents__clear" data-action="recent-clear">Clear</button></div>` : ""}
     ${state.find.trim().length >= 2 ? viewFind() : `
     ${consoleBlock()}
     ${all.length ? `<div class="when seg" role="group" aria-label="When">${WHEN.map(([k, l]) => `<button data-action="when" data-v="${k}" aria-pressed="${state.when === k}">${l}</button>`).join("")}</div>` : ""}
@@ -632,6 +633,9 @@ function viewSettings() {
       <div class="row"><div class="row__main"><div class="row__title">New screenings</div><div class="row__sub">A film you follow appears on the calendar</div></div>${sw("notify_new", n.notify_new !== false, "New screenings")}</div>
       <div class="row"><div class="row__main"><div class="row__title">Changes</div><div class="row__sub">Rescheduled dates, new or changed showtimes</div></div>${sw("notify_changes", n.notify_changes !== false, "Changes")}</div>
       <div class="row"><div class="row__main"><div class="row__title">Cancellations</div><div class="row__sub">A screening you were told about disappears</div></div>${sw("notify_cancellations", n.notify_cancellations !== false, "Cancellations")}</div>
+      <div class="row"><div class="row__main"><div class="row__title">Last chance</div><div class="row__sub">A film you follow is down to its final NYC screening, within 2 days</div></div>${sw("notify_last_chance", n.notify_last_chance !== false, "Last chance reminders")}</div>
+      <div class="row"><div class="row__main"><div class="row__title">Weekly digest</div><div class="row__sub">Sundays at 9 AM: everything you follow playing that week</div></div>
+        <button class="btn btn--sm" data-action="digest-now">Send now</button>${sw("weekly_digest", n.weekly_digest !== false, "Weekly digest")}</div>
       <div class="row"><div class="row__main"><div class="row__title">Email service</div><div class="row__sub">${prov === "resend" ? "Resend is connected" : prov === "smtp" ? "Your mail server is connected" : "Not confirmed yet — send a test to check"}</div></div>
         <button class="btn btn--sm" data-action="test-email">Send test email</button></div>
     </div>
@@ -641,7 +645,9 @@ function viewSettings() {
     <p class="group-foot">Filters only change which screenings are emailed — everything you follow still appears in the app. When formats are chosen, screenings that don’t list a format are skipped.</p>
 
     ${lbData()?.films && lbCfg().enabled !== false ? `<div class="group-label">Letterboxd</div>
-    <div class="group">${recentRow()}</div>
+    <div class="group">${recentRow()}
+      <div class="row"><div class="row__main"><div class="row__title">Also follow my watchlist</div><div class="row__sub">Films on your Letterboxd watchlist appear in Upcoming and are emailed like favorites</div></div>
+        <label class="switch"><input type="checkbox" data-action="lb-set" data-key="include_watchlist" ${lbCfg().include_watchlist ? "checked" : ""} aria-label="Follow watchlist"><span></span></label></div></div>
     <p class="group-foot">More Letterboxd options are in Watchlist → Letterboxd.</p>` : ""}
 
     <div class="group-label">Schedule</div>
@@ -667,6 +673,8 @@ function viewSettings() {
     <div class="group">
       <div class="row"><div class="row__main"><div class="row__title">Connected to</div><div class="row__sub">${h(state.src?.label || "")}</div></div>
         ${isLocal() ? "" : `<button class="btn btn--sm btn--danger" data-action="disconnect">Disconnect</button>`}</div>
+      ${isLocal() ? "" : `<div class="row"><div class="row__main"><div class="row__title">Sign in on another device</div><div class="row__sub">A private link that opens Filament already signed in. Treat it like a password.</div></div>
+        <button class="btn btn--sm" data-action="device-link">Share link</button></div>`}
     </div>
     <div class="group-label">About</div>
     <div class="group"><div class="row"><div class="row__main"><div class="row__title">Where the listings come from</div>
@@ -691,7 +699,7 @@ function welcome(errMsg) {
     <h2 class="welcome__signin">Open your Filament</h2>
     ${errMsg ? `<p class="error-text">${h(errMsg)}</p>` : ""}
     <form id="connect">
-      <label class="field"><span>GitHub username</span><input name="owner" autocomplete="username" autocapitalize="off" value="${h(c.owner || "")}" required></label>
+      <label class="field"><span>GitHub username</span><input name="owner" autocomplete="username" autocapitalize="off" value="${h(c.owner || (location.hostname.endsWith(".github.io") ? location.hostname.split(".")[0] : ""))}" required></label>
       <label class="field"><span>Repository name</span><input name="repo" autocapitalize="off" value="${h(c.repo || "filament")}" required></label>
       <label class="field"><span>Access token</span><input name="token" type="password" autocomplete="off" placeholder="github_pat_…" required></label>
       <button class="btn btn--brass" style="width:100%;height:48px" ${state.busy ? "disabled" : ""}>${state.busy ? "Opening…" : "Open Filament"}</button>
@@ -992,6 +1000,43 @@ async function followFilm(f) {
     directors: (f.directors || []).map((x) => x.name), aka: [], added: todayISO(), enabled: true }, "films");
 }
 const reopenSheet = () => { if (sheetRoot.dataset.key) openSheet(sheetRoot.dataset.key); };
+
+/* ---------------------------------------------------- recent searches */
+function recentSearches() { try { return JSON.parse(localStorage.getItem("filament.recent")) || []; } catch { return []; } }
+let recentTimer = 0;
+function rememberSearchSoon(q) {
+  clearTimeout(recentTimer);
+  recentTimer = setTimeout(() => {   // only remember searches you paused on, not every keystroke
+    const k = fold(q);
+    const secret = ["damn fine coffee", "the owls are not what they seem", "fire walk with me", "gotta light", "asa nisi masa", "la dolce vita", "breathless", "godard", "pierrot le fou"];
+    if (secret.some((x) => k.includes(x))) return;
+    const list = [q, ...recentSearches().filter((x) => fold(x) !== k)].slice(0, 6);
+    try { localStorage.setItem("filament.recent", JSON.stringify(list)); } catch { /* ignore */ }
+  }, 1500);
+}
+
+/* --------------------------------------------------------- what's new */
+const WHATS_NEW = { id: "2026-11-weekly", items: [
+  ["Weekly digest", "Every Sunday at 9 AM: what you follow that’s playing that week — with a link to send it to a friend."],
+  ["Last chance", "A heads-up when a film you follow is down to its final NYC screening."],
+  ["Press and hold", "Hold any screening for Calendar, Share, Tickets and Directions."],
+  ["Tonight · This weekend", "Quick filters at the top of Upcoming."],
+  ["Sign in on another device", "Settings → This device makes a private link, so there’s no token to paste."],
+] };
+function maybeWhatsNew() {
+  let seen = null;
+  try { seen = localStorage.getItem("filament.whatsnew"); } catch { return; }
+  try { localStorage.setItem("filament.whatsnew", WHATS_NEW.id); } catch { /* ignore */ }
+  if (!seen || seen === WHATS_NEW.id) return;          // brand-new devices don't need a changelog
+  sheetRoot.innerHTML = `<div class="scrim" data-action="close-sheet"></div>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="wn-title"><div class="sheet__grab"></div>
+      <div class="sheet__hero"><button class="icon-btn sheet__close" data-action="close-sheet" aria-label="Close">${ICON.close}</button>
+        <div class="eyebrow">Filament</div><h2 class="sheet__title" id="wn-title">What’s new</h2></div>
+      <div class="sheet__section"><ul class="whatsnew">${WHATS_NEW.items.map(([t, d]) => `<li>${lamp("on")}<div><b>${h(t)}</b><span>${h(d)}</span></div></li>`).join("")}</ul>
+        <div class="actions" style="margin-top:18px"><button class="btn btn--brass" data-action="close-sheet" style="width:100%">Continue</button></div></div>
+    </div>`;
+  dragToDismiss(sheetRoot.querySelector(".sheet"));
+}
 
 /* ------------------------------------------------- motion & small joys */
 const reducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -1326,12 +1371,27 @@ async function onAction(el, ev) {
     catch (e) { toast(e.message); }
     return;
   }
+  if (a === "device-link") {
+    const c = loadConnection();
+    if (!c) return;
+    const link = `${location.origin}${location.pathname}#connect=${btoa(JSON.stringify({ o: c.owner, r: c.repo, t: c.token }))}`;
+    if (navigator.share) { try { await navigator.share({ title: "Open Filament", url: link }); } catch { /* cancelled */ } }
+    else { try { await navigator.clipboard.writeText(link); toast("Link copied — open it on your other device"); } catch { toast("Couldn’t copy"); } }
+    return;
+  }
+  if (a === "digest-now") {
+    try { await state.src.dispatch("digest"); toast("This week’s digest is on its way — about a minute"); }
+    catch (e) { toast(e.message); }
+    return;
+  }
   if (a === "test-email") {
     try { await state.src.dispatch("test-email"); toast("Test email requested — it should arrive within a couple of minutes"); }
     catch (e) { toast(e.message); }
     return;
   }
   if (a === "find-clear") { state.find = ""; return render(); }
+  if (a === "recent") { state.find = el.dataset.q; render(); document.getElementById("find")?.focus(); return; }
+  if (a === "recent-clear") { try { localStorage.removeItem("filament.recent"); } catch { /* ignore */ } return render(); }
   if (a === "when") { state.when = el.dataset.v; state.enter = true; return transition(render); }
   if (a === "share") { const d = findItem(el.dataset.key); if (d) shareScreening(d); return; }
   if (a === "lb-recent") {
@@ -1450,6 +1510,7 @@ document.addEventListener("input", (ev) => {
   if (ev.target.id === "q") runSearch(ev.target.value);
   if (ev.target.id === "aq") { state.archiveQuery = ev.target.value; render(); }
   if (ev.target.id === "find") { state.find = ev.target.value; render(); secretSearch(state.find); }
+  if (ev.target.id === "find" && ev.target.value.trim().length >= 3) rememberSearchSoon(ev.target.value.trim());
 });
 document.addEventListener("keydown", (ev) => {
   if (ev.key === "Escape") {
@@ -1485,16 +1546,27 @@ function bindWelcome() {
 applyTheme();
 // Instant launch & offline: cache the app itself (never your data).
 if ("serviceWorker" in navigator && !isLocal()) {
-  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261109202448").catch(() => {}));
+  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261109210317").catch(() => {}));
 }
+// "Sign in on another device" links carry the connection in the #fragment (never sent to any server).
+(function acceptDeviceLink() {
+  const m = /#connect=([A-Za-z0-9+/=]+)/.exec(location.hash);
+  if (!m) return;
+  try {
+    const j = JSON.parse(atob(m[1]));
+    if (j.o && j.r && j.t) saveConnection({ owner: j.o, repo: j.r, token: j.t });
+  } catch { /* ignore a damaged link */ }
+  history.replaceState(null, "", location.pathname + location.search);
+})();
 const conn = loadConnection();
 if (isLocal() || conn) {
   state.src = makeSource(conn || {});
   const c = cached();
   if (c?.data && !isLocal()) { state.data = c.data; state.loading = false; }
   render();
-  refresh(!!state.data);
+  refresh(!!state.data).then(() => { if (!isLocal()) maybeWhatsNew(); });
 } else {
+  try { localStorage.setItem("filament.whatsnew", WHATS_NEW.id); } catch { /* ignore */ }
   state.loading = false;
   render();
 }
