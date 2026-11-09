@@ -1,11 +1,11 @@
-import { creditIsDirector, fold, matchFilm, matchOccurrence } from "./match.js?v=20261109210317";
+import { creditIsDirector, fold, matchFilm, matchOccurrence } from "./match.js?v=20261109210744";
 import {
   ApiError, cached, forgetConnection, isLocal, loadAll, loadConnection, makeSource, mutateSettings, saveConnection,
-} from "./data.js?v=20261109210317";
-import { followList, forYou, importExport, lookup, lovedDirectors, recentlyWatched, stars } from "./letterboxd.js?v=20261109210317";
+} from "./data.js?v=20261109210744";
+import { followList, forYou, importExport, lookup, lovedDirectors, recentlyWatched, stars } from "./letterboxd.js?v=20261109210744";
 import {
   filmographyFor, searchCatalog, searchWikidataDirectors, searchWikidataFilms, slugFromCatalog,
-} from "./search.js?v=20261109210317";
+} from "./search.js?v=20261109210744";
 
 const TZ = "America/New_York";
 const app = document.getElementById("app");
@@ -640,6 +640,9 @@ function viewSettings() {
         <button class="btn btn--sm" data-action="test-email">Send test email</button></div>
     </div>
 
+    <div class="group-label">Phone notifications</div>
+    ${pushBlock()}
+
     <div class="group-label">What gets emailed</div>
     ${filtersBlock(n.filters || {})}
     <p class="group-foot">Filters only change which screenings are emailed — everything you follow still appears in the app. When formats are chosen, screenings that don’t list a format are skipped.</p>
@@ -1000,6 +1003,94 @@ async function followFilm(f) {
     directors: (f.directors || []).map((x) => x.name), aka: [], added: todayISO(), enabled: true }, "films");
 }
 const reopenSheet = () => { if (sheetRoot.dataset.key) openSheet(sheetRoot.dataset.key); };
+
+/* ------------------------------------------------- phone notifications */
+const b64u = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+const b64uBytes = (s) => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((s.length + 3) % 4)), (c) => c.charCodeAt(0));
+const pushSupported = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+const isStandalone = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+let pushState = { subscribed: null };
+async function refreshPushState() {
+  if (!pushSupported() || isLocal()) return;
+  try {
+    const reg = await navigator.serviceWorker.getRegistration();
+    const sub = reg && await reg.pushManager.getSubscription();
+    const was = pushState.subscribed;
+    pushState.subscribed = !!sub;
+    if (was !== pushState.subscribed && state.view === "settings") render();
+  } catch { /* ignore */ }
+}
+function pushBlock() {
+  const pub = settings().push?.vapid_public;
+  const repoSecrets = (() => { const c = loadConnection(); return c ? `https://github.com/${c.owner}/${c.repo}/settings/secrets/actions` : "https://github.com"; })();
+  if (!pub) {
+    return `<div class="group"><div class="row"><div class="row__main"><div class="row__title">Get banners on your lock screen</div>
+      <div class="row__sub">One-time setup: Filament makes a key pair on this device; you paste one key into GitHub.</div></div>
+      <button class="btn btn--sm btn--brass" data-action="push-setup">Set up</button></div></div>`;
+  }
+  let status, btn = "";
+  if (!pushSupported()) status = "This browser can’t receive notifications.";
+  else if (/iPhone|iPad/.test(navigator.userAgent) && !isStandalone()) status = "On iPhone: open Filament from your Home Screen (Share → Add to Home Screen), then turn notifications on there.";
+  else if (Notification.permission === "denied") status = "Notifications are blocked for Filament — allow them in your device settings.";
+  else if (pushState.subscribed) { status = "On for this device."; btn = `<button class="btn btn--sm" data-action="push-test">Send test</button><button class="btn btn--sm btn--ghost" data-action="push-off">Turn off</button>`; }
+  else { status = "Off for this device."; btn = `<button class="btn btn--sm btn--brass" data-action="push-on">Turn on</button>`; }
+  return `<div class="group"><div class="row"><div class="row__main"><div class="row__title">This device</div><div class="row__sub">${h(status)}</div></div><div class="actions">${btn}</div></div>
+    <div class="row"><div class="row__main"><div class="row__sub">Notifications need the <b>VAPID_PRIVATE_KEY</b> secret in <a href="${h(repoSecrets)}" target="_blank" rel="noopener">your GitHub settings</a>. Lost it? <a href="#" data-action="push-setup">Make a new key pair</a> (devices then need turning on again).</div></div></div></div>`;
+}
+async function pushSetup() {
+  if (settings().push?.vapid_public && !confirm("Make a new key pair? You’ll need to replace the GitHub secret and turn notifications on again on each device.")) return;
+  const kp = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
+  const jwk = await crypto.subtle.exportKey("jwk", kp.privateKey);
+  const raw = await crypto.subtle.exportKey("raw", kp.publicKey);
+  const pub = b64u(raw), priv = jwk.d;
+  await saveSettings((s) => { s.push = { ...(s.push || {}), vapid_public: pub }; }, "Set up phone notifications");
+  try { await state.src.writeFile("push.json", { subs: [] }, "Reset phone notification devices"); } catch { /* ignore */ }
+  const c = loadConnection();
+  const secretsURL = c ? `https://github.com/${c.owner}/${c.repo}/settings/secrets/actions/new` : "https://github.com";
+  sheetRoot.innerHTML = `<div class="scrim"></div>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="pk-title"><div class="sheet__grab"></div>
+      <div class="sheet__hero"><div class="eyebrow">Phone notifications · step 1 of 2</div><h2 class="sheet__title" id="pk-title">Save this key in GitHub</h2>
+        <p class="page-sub">It lets the daily check sign notifications. It’s shown only once and never leaves this device except to GitHub.</p></div>
+      <div class="sheet__section">
+        <div class="keybox"><code id="pk">${h(priv)}</code></div>
+        <div class="actions" style="margin-top:12px"><button class="btn btn--brass" data-action="pk-copy">Copy key</button>
+          <a class="btn" href="${h(secretsURL)}" target="_blank" rel="noopener">Open GitHub secrets</a></div>
+        <ol class="steps"><li>In GitHub: <b>New repository secret</b>.</li><li>Name: <b>VAPID_PRIVATE_KEY</b></li><li>Secret: paste the key, then <b>Add secret</b>.</li>
+          <li>Back here: <b>Turn on</b> for this device (on iPhone, from the Home Screen app).</li></ol>
+        <div class="actions" style="margin-top:16px"><button class="btn" data-action="close-sheet" style="width:100%">I’ve saved it</button></div>
+      </div></div>`;
+}
+async function pushOn() {
+  try {
+    if ((await Notification.requestPermission()) !== "granted") { toast("Notifications weren’t allowed"); return; }
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64uBytes(settings().push.vapid_public) });
+    const j = sub.toJSON();
+    const doc = (await state.src.readFile("push.json")) || { subs: [] };
+    doc.subs = [...(doc.subs || []).filter((x) => x.endpoint !== j.endpoint),
+      { endpoint: j.endpoint, keys: j.keys, added: todayISO(), device: /iPhone/.test(navigator.userAgent) ? "iPhone" : /Mac/.test(navigator.userAgent) ? "Mac" : "Browser" }];
+    await state.src.writeFile("push.json", doc, "Turn on phone notifications for a device");
+    pushState.subscribed = true;
+    render();
+    toast("Notifications are on for this device");
+  } catch (e) { toast(`Couldn’t turn on notifications: ${e.message}`); }
+}
+async function pushOff() {
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (sub) {
+      const ep = sub.endpoint;
+      await sub.unsubscribe();
+      const doc = (await state.src.readFile("push.json")) || { subs: [] };
+      doc.subs = (doc.subs || []).filter((x) => x.endpoint !== ep);
+      await state.src.writeFile("push.json", doc, "Turn off phone notifications for a device");
+    }
+    pushState.subscribed = false;
+    render();
+    toast("Notifications are off for this device");
+  } catch (e) { toast(e.message); }
+}
 
 /* ---------------------------------------------------- recent searches */
 function recentSearches() { try { return JSON.parse(localStorage.getItem("filament.recent")) || []; } catch { return []; } }
@@ -1379,6 +1470,14 @@ async function onAction(el, ev) {
     else { try { await navigator.clipboard.writeText(link); toast("Link copied — open it on your other device"); } catch { toast("Couldn’t copy"); } }
     return;
   }
+  if (a === "push-setup") { ev.preventDefault(); return pushSetup(); }
+  if (a === "pk-copy") { try { await navigator.clipboard.writeText(document.getElementById("pk").textContent); toast("Key copied"); } catch { toast("Select the key and copy it"); } return; }
+  if (a === "push-on") return pushOn();
+  if (a === "push-off") return pushOff();
+  if (a === "push-test") {
+    try { await state.src.dispatch("test-push"); toast("Test notification on its way — about a minute"); } catch (e) { toast(e.message); }
+    return;
+  }
   if (a === "digest-now") {
     try { await state.src.dispatch("digest"); toast("This week’s digest is on its way — about a minute"); }
     catch (e) { toast(e.message); }
@@ -1546,7 +1645,7 @@ function bindWelcome() {
 applyTheme();
 // Instant launch & offline: cache the app itself (never your data).
 if ("serviceWorker" in navigator && !isLocal()) {
-  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261109210317").catch(() => {}));
+  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261109210744").catch(() => {}));
 }
 // "Sign in on another device" links carry the connection in the #fragment (never sent to any server).
 (function acceptDeviceLink() {
@@ -1564,7 +1663,7 @@ if (isLocal() || conn) {
   const c = cached();
   if (c?.data && !isLocal()) { state.data = c.data; state.loading = false; }
   render();
-  refresh(!!state.data).then(() => { if (!isLocal()) maybeWhatsNew(); });
+  refresh(!!state.data).then(() => { if (!isLocal()) maybeWhatsNew(); refreshPushState(); });
 } else {
   try { localStorage.setItem("filament.whatsnew", WHATS_NEW.id); } catch { /* ignore */ }
   state.loading = false;

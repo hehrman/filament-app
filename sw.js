@@ -27,3 +27,21 @@ self.addEventListener("fetch", (e) => {
     return r;
   })));
 });
+
+// Phone notifications (sent by the daily check).
+self.addEventListener("push", (e) => {
+  let m = {};
+  try { m = e.data ? e.data.json() : {}; } catch { m = { body: e.data && e.data.text() }; }
+  e.waitUntil(self.registration.showNotification(m.title || "Filament", {
+    body: m.body || "Something you follow was scheduled.", icon: "icon-180.png", badge: "icon-180.png",
+    data: { url: m.url || "./" }, tag: "filament",
+  }));
+});
+self.addEventListener("notificationclick", (e) => {
+  e.notification.close();
+  const url = new URL(e.notification.data?.url || "./", self.location).href;
+  e.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
+    const open = list.find((c) => c.url.startsWith(new URL("./", self.location).href));
+    return open ? open.focus() : self.clients.openWindow(url);
+  }));
+});

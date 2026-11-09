@@ -808,3 +808,6 @@ body { overscroll-behavior-y: contain; }
 .whatsnew li { display: grid; grid-template-columns: 34px 1fr; gap: 12px; align-items: start; }
 .whatsnew b { display: block; font-size: 16px; }
 .whatsnew span { color: var(--text-2); font-size: 14px; line-height: 1.45; }
+
+.keybox { padding: 14px; border-radius: 12px; background: var(--surface); border: 1px dashed var(--brass); word-break: break-all; }
+.keybox code { font: 600 14px/1.5 var(--font-mono); -webkit-user-select: all; user-select: all; }
