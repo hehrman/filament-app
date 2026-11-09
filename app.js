@@ -1,11 +1,11 @@
-import { creditIsDirector, fold, matchFilm, matchOccurrence } from "./match.js?v=20261109200723";
+import { creditIsDirector, fold, matchFilm, matchOccurrence } from "./match.js?v=20261109202448";
 import {
   ApiError, cached, forgetConnection, isLocal, loadAll, loadConnection, makeSource, mutateSettings, saveConnection,
-} from "./data.js?v=20261109200723";
-import { followList, forYou, importExport, lookup, lovedDirectors, recentlyWatched, stars } from "./letterboxd.js?v=20261109200723";
+} from "./data.js?v=20261109202448";
+import { followList, forYou, importExport, lookup, lovedDirectors, recentlyWatched, stars } from "./letterboxd.js?v=20261109202448";
 import {
   filmographyFor, searchCatalog, searchWikidataDirectors, searchWikidataFilms, slugFromCatalog,
-} from "./search.js?v=20261109200723";
+} from "./search.js?v=20261109202448";
 
 const TZ = "America/New_York";
 const app = document.getElementById("app");
@@ -15,7 +15,7 @@ const toastRoot = document.getElementById("toast-root");
 const state = {
   src: null, data: null, view: "upcoming", watchTab: "directors", archiveFilter: "upcoming",
   archiveQuery: "", running: false, loading: true, error: null, results: null, query: "",
-  searching: false, busy: false, find: "",
+  searching: false, busy: false, find: "", when: "all",
 };
 
 /* ----------------------------------------------------------- helpers */
@@ -377,14 +377,32 @@ function forYouBlock() {
 }
 
 /* ----------------------------------------------------------- views */
+const WHEN = [["all", "All"], ["tonight", "Tonight"], ["weekend", "This weekend"], ["week", "Next 7 days"]];
+function whenRange(k) {
+  const t = todayISO();
+  const add = (n) => nyDate(new Date(Date.now() + n * 864e5));
+  if (k === "tonight") return [t, t];
+  if (k === "week") return [t, add(6)];
+  if (k === "weekend") {
+    const dow = dateObj(t).getDay();                      // 0 Sun … 6 Sat
+    if (dow === 0) return [t, t];                          // it's Sunday: just today
+    const fri = Math.max(0, 5 - dow);                      // Friday (or today if Fri/Sat)
+    return [add(dow === 6 ? 0 : fri), add(7 - dow)];
+  }
+  return ["0000", "9999"];
+}
 function viewUpcoming() {
-  const items = upcomingItems();
+  const all = upcomingItems();
+  const [from, to] = whenRange(state.when);
+  const items = all.filter((d) => d.date >= from && d.date <= to);
   const s = settings();
   const names = [...s.directors.filter((d) => d.enabled !== false).map((d) => d.name), ...s.films.filter((f) => f.enabled !== false).map((f) => f.title)];
   const lbn = (interests()._letterboxd || []).length;
   if (lbn) names.push(`${lbn} Letterboxd favorites`);
   const following = names.length ? `Following ${names.slice(0, 3).map(h).join(", ")}${names.length > 3 ? ` and ${names.length - 3} more` : ""}` : "You aren’t following anyone yet";
-  const body = items.length ? dayGroups(items) : `<div class="empty">${tubesArt(360, 150)}
+  const body = items.length ? dayGroups(items) : all.length ? `<div class="empty"><h3>Nothing ${h({ tonight: "tonight", weekend: "this weekend", week: "in the next 7 days" }[state.when])}</h3>
+      <p>${plural(all.filter((d) => d.status === "active").length, "screening")} you follow ${all.length === 1 ? "is" : "are"} coming up later.</p>
+      <div class="actions" style="justify-content:center;margin-top:14px"><button class="btn" data-action="when" data-v="all">Show all</button></div></div>` : `<div class="empty">${tubesArt(360, 150)}
       <h3>No upcoming screenings yet</h3>
       <p>${D().status?.last_success ? "Nothing you follow is playing in New York right now. Filament checks every morning and will email you the moment something appears." : "Once the first check runs, upcoming screenings of what you follow will appear here."}</p></div>`;
   return `<div class="page">
@@ -394,6 +412,7 @@ function viewUpcoming() {
     <div class="search search--find">${ICON.search}<input id="find" type="search" autocomplete="off" placeholder="Is it playing? Search films & directors" value="${h(state.find)}" aria-label="Search everything playing in New York"></div>
     ${state.find.trim().length >= 2 ? viewFind() : `
     ${consoleBlock()}
+    ${all.length ? `<div class="when seg" role="group" aria-label="When">${WHEN.map(([k, l]) => `<button data-action="when" data-v="${k}" aria-pressed="${state.when === k}">${l}</button>`).join("")}</div>` : ""}
     ${items.length ? `${wireEl()}<div style="height:22px"></div>` : ""}
     ${body}
     ${forYouBlock()}`}
@@ -851,6 +870,78 @@ function letterboxdURL(f) {
   return `https://letterboxd.com/search/films/${encodeURIComponent(`${f.title}${f.year ? ` ${f.year}` : ""}`)}/`;
 }
 
+/* -------------------------------------------- long-press (context) menus */
+let menuSuppressClick = false;
+function closeMenu() { document.querySelector(".ctx")?.remove(); document.querySelector(".ctx-lift")?.classList.remove("ctx-lift"); }
+function openMenu(el, x, y) {
+  const key = el.dataset.key;
+  const d = key && findItem(key);
+  if (!d) return;
+  closeMenu();
+  el.classList.add("ctx-lift");
+  const f = d.films[0];
+  const credit = (f.directors || [])[0];
+  const items = [
+    ["open", "Details", ""],
+    ["ics", `Add to Calendar${d.showtimes?.[0] ? ` · ${d.showtimes[0]}` : ""}`, ""],
+    ["share", "Share", ""],
+    d.ticket_url ? ["tickets", "Tickets", ""] : null,
+    ["maps", "Directions", ""],
+    credit && !isFollowingCredit(credit) ? ["follow", `Follow ${credit.name}`, ""] : null,
+  ].filter(Boolean);
+  const m = document.createElement("div");
+  m.className = "ctx";
+  m.setAttribute("role", "menu");
+  m.innerHTML = `<div class="ctx__title">${h(f.title)}<span>${h(fmtDay(d.date, { weekday: "short", month: "short", day: "numeric" }))} · ${h(d.venue)}</span></div>` +
+    items.map(([a, l]) => `<button role="menuitem" data-ctx="${a}">${h(l)}</button>`).join("");
+  document.body.append(m);
+  const r = m.getBoundingClientRect();
+  m.style.left = `${Math.max(12, Math.min(x - r.width / 2, innerWidth - r.width - 12))}px`;
+  m.style.top = `${Math.max(12, Math.min(y + 12, innerHeight - r.height - 12))}px`;
+  m.addEventListener("click", (ev) => {
+    const b = ev.target.closest("[data-ctx]");
+    if (!b) return;
+    const act = b.dataset.ctx;
+    closeMenu();
+    if (act === "open") openSheet(key);
+    if (act === "ics") { downloadICS(d, d.showtimes?.[0] || ""); toast("Calendar event created — open it to add to Calendar"); }
+    if (act === "share") shareScreening(d);
+    if (act === "tickets") window.open(d.ticket_url, "_blank", "noopener");
+    if (act === "maps") window.open(`https://maps.apple.com/?q=${encodeURIComponent(`${d.venue}, New York, NY`)}`, "_blank", "noopener");
+    if (act === "follow") followDirector(credit.name, credit.tmdb || null, credit.slug || null);
+  });
+}
+(function bindContextMenus() {
+  const SEL = ".card, .slot, .ledger-row, .pick__open";
+  let timer = 0, sx = 0, sy = 0;
+  document.addEventListener("pointerdown", (e) => {
+    if (!e.target.closest(".ctx")) menuSuppressClick = false;   // a fresh touch is never swallowed
+    const el = e.target.closest(SEL);
+    if (!el || e.pointerType === "mouse") return;
+    sx = e.clientX; sy = e.clientY;
+    timer = setTimeout(() => { menuSuppressClick = true; openMenu(el, sx, sy); }, 480);
+  });
+  document.addEventListener("pointermove", (e) => { if (timer && Math.hypot(e.clientX - sx, e.clientY - sy) > 10) { clearTimeout(timer); timer = 0; } });
+  document.addEventListener("pointerup", () => {
+    clearTimeout(timer); timer = 0;
+    // swallow only the click that immediately follows a long-press (iOS may not send one)
+    if (menuSuppressClick) setTimeout(() => { menuSuppressClick = false; }, 350);
+  });
+  document.addEventListener("pointercancel", () => { clearTimeout(timer); timer = 0; });
+  document.addEventListener("contextmenu", (e) => {
+    const el = e.target.closest(SEL);
+    if (!el) return;
+    e.preventDefault();
+    openMenu(el, e.clientX, e.clientY);
+  });
+  document.addEventListener("click", (e) => {
+    if (menuSuppressClick) { menuSuppressClick = false; e.stopPropagation(); e.preventDefault(); return; }
+    if (!e.target.closest(".ctx")) closeMenu();
+  }, true);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMenu(); });
+  addEventListener("scroll", closeMenu, { passive: true });
+})();
+
 /* ------------------------------------------------------------- share */
 async function shareScreening(d) {
   const title = d.films.map((f) => f.title).join(" + ");
@@ -1140,7 +1231,10 @@ async function refresh(quiet) {
     state.running = !!(await state.src.activeRun().catch(() => null));
     if (state.running) pollRun();
   } catch (e) {
-    state.error = e instanceof ApiError ? e.message : `Couldn’t load your data: ${e.message}`;
+    if (!(e instanceof ApiError) && state.data) {
+      state.error = null;
+      if (!quiet) toast("You’re offline — showing your last update");
+    } else state.error = e instanceof ApiError ? e.message : `Couldn’t load your data: ${e.message}`;
   }
   state.loading = false;
   render();
@@ -1238,6 +1332,7 @@ async function onAction(el, ev) {
     return;
   }
   if (a === "find-clear") { state.find = ""; return render(); }
+  if (a === "when") { state.when = el.dataset.v; state.enter = true; return transition(render); }
   if (a === "share") { const d = findItem(el.dataset.key); if (d) shareScreening(d); return; }
   if (a === "lb-recent") {
     const v = Number(el.dataset.v);
@@ -1388,6 +1483,10 @@ function bindWelcome() {
 
 /* -------------------------------------------------------------- boot */
 applyTheme();
+// Instant launch & offline: cache the app itself (never your data).
+if ("serviceWorker" in navigator && !isLocal()) {
+  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261109202448").catch(() => {}));
+}
 const conn = loadConnection();
 if (isLocal() || conn) {
   state.src = makeSource(conn || {});
