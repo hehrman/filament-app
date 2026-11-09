@@ -1,12 +1,12 @@
-import { creditIsDirector, fold, matchFilm, matchOccurrence } from "./match.js?v=20261109222816";
+import { creditIsDirector, fold, matchFilm, matchOccurrence } from "./match.js?v=20261109234551";
 import {
-  ApiError, FRIENDS_API, cached, emailSignIn, forgetConnection, isLocal, joinFilament, joinInfo, loadAll, loadConnection,
+  ApiError, FRIENDS_API, cached, emailSignIn, forgetConnection, isLocal, joinFilament, joinInfo, letterboxdFeed, loadAll, loadConnection,
   makeSource, mutateSettings, saveConnection,
-} from "./data.js?v=20261109222816";
-import { followList, forYou, importExport, lookup, lovedDirectors, recentlyWatched, stars } from "./letterboxd.js?v=20261109222816";
+} from "./data.js?v=20261109234551";
+import { followList, forYou, importExport, lookup, lovedDirectors, mergeFeed, recentlyWatched, stars } from "./letterboxd.js?v=20261109234551";
 import {
   filmographyFor, searchCatalog, searchWikidataDirectors, searchWikidataFilms, slugFromCatalog,
-} from "./search.js?v=20261109222816";
+} from "./search.js?v=20261109234551";
 
 const TZ = "America/New_York";
 const app = document.getElementById("app");
@@ -401,12 +401,13 @@ function viewUpcoming() {
   const names = [...s.directors.filter((d) => d.enabled !== false).map((d) => d.name), ...s.films.filter((f) => f.enabled !== false).map((f) => f.title)];
   const lbn = (interests()._letterboxd || []).length;
   if (lbn) names.push(`${lbn} Letterboxd favorites`);
+  const setup = setupCard();
   const following = names.length ? `Following ${names.slice(0, 3).map(h).join(", ")}${names.length > 3 ? ` and ${names.length - 3} more` : ""}` : "You aren’t following anyone yet";
   const body = items.length ? dayGroups(items) : all.length ? `<div class="empty"><h3>Nothing ${h({ tonight: "tonight", weekend: "this weekend", week: "in the next 7 days" }[state.when])}</h3>
       <p>${plural(all.filter((d) => d.status === "active").length, "screening")} you follow ${all.length === 1 ? "is" : "are"} coming up later.</p>
       <div class="actions" style="justify-content:center;margin-top:14px"><button class="btn" data-action="when" data-v="all">Show all</button></div></div>` : `<div class="empty">${tubesArt(360, 150)}
-      <h3>${names.length ? "No upcoming screenings yet" : "Start with someone you love"}</h3>
-      <p>${!names.length ? "Follow a director or a film — Filament shows every New York screening and tells you the moment a new one is scheduled. Or search above to see if something is playing right now."
+      <h3>${names.length ? "No upcoming screenings yet" : "Tell Filament what you love"}</h3>
+      <p>${!names.length ? "Follow a director or a film, or connect Letterboxd. The moment one is scheduled in New York, you’ll get a notification or an email — and it shows up right here."
         : D().status?.last_success ? "Nothing you follow is playing in New York right now. Filament checks every morning and will email you the moment something appears." : "Once the first check runs, upcoming screenings of what you follow will appear here."}</p>
       ${names.length ? "" : `<div class="actions" style="justify-content:center;margin-top:16px"><button class="btn btn--brass" data-action="nav" data-view="watch">Follow a director or film</button>${isFriend() ? `<button class="btn" data-action="lb-start">Import from Letterboxd</button>` : ""}</div>`}</div>`;
   return `<div class="page">
@@ -416,11 +417,12 @@ function viewUpcoming() {
     <div class="search search--find">${ICON.search}<input id="find" type="search" autocomplete="off" placeholder="Is it playing? Search any film" value="${h(state.find)}" aria-label="Search everything playing in New York"></div>
     ${!state.find && recentSearches().length ? `<div class="recents"><span>Recent</span>${recentSearches().map((q) => `<button class="chip chip--btn recents__q" data-action="recent" data-q="${h(q)}">${h(q)}</button>`).join("")}<button class="recents__clear" data-action="recent-clear">Clear</button></div>` : ""}
     ${state.find.trim().length >= 2 ? viewFind() : `
+    ${setup}
     ${consoleBlock()}
-    ${names.length ? homeScreenTip() : ""}
+    ${setup ? "" : names.length && !isFriend() ? homeScreenTip() : ""}
     ${all.length ? `<div class="when seg" role="group" aria-label="When">${WHEN.map(([k, l]) => `<button data-action="when" data-v="${k}" aria-pressed="${state.when === k}">${l}</button>`).join("")}</div>` : ""}
     ${items.length ? `${wireEl()}<div style="height:22px"></div>` : ""}
-    ${body}
+    ${setup && !names.length ? "" : body}
     ${forYouBlock()}`}
   </div>`;
 }
@@ -459,16 +461,54 @@ function recentRow() {
     <div class="seg">${RECENT_CHOICES.map(([v, t]) => `<button data-action="lb-recent" data-v="${v}" aria-pressed="${m === v}">${t}</button>`).join("")}</div></div>`;
 }
 
+const lbConnected = () => !!(lbData()?.films && Object.keys(lbData().films).length && lbCfg().enabled !== false);
+const LB_MARK = `<span class="lb-mark" aria-hidden="true"><i></i><i></i><i></i></span>`;
+const LB_ICONS = {
+  star: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.9L12 16.9l-5.2 2.8 1-5.9-4.3-4.1 5.9-.8z"/></svg>`,
+  spark: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6"/></svg>`,
+  eye: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.8"/></svg>`,
+  sync: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M19.5 9A8 8 0 0 0 5 7.5M4.5 15A8 8 0 0 0 19 16.5"/><path d="M19.5 4v5h-5M4.5 20v-5h5"/></svg>`,
+};
+const LB_BENEFITS = [
+  ["star", "Your favorites, followed automatically", "Every film you’ve rated ★★★★½ or higher — you choose the bar."],
+  ["spark", "Suggestions that know your taste", "Picks from what’s playing in New York, based on how you rate."],
+  ["eye", "No reminders for what you just saw", "Recent watches are skipped, and everything you’ve logged is marked Seen."],
+  ["sync", "Always up to date", "New ratings are picked up every morning."],
+];
+function lbConnectForm(compact) {
+  return `<form class="lb-connect${compact ? " lb-connect--compact" : ""}" autocomplete="off">
+    <label class="lb-field"><span class="lb-field__pre">letterboxd.com/</span><input name="user" placeholder="username" autocapitalize="off" autocorrect="off" spellcheck="false" required aria-label="Letterboxd username" value="${h(state.lbUser || "")}"></label>
+    <button class="btn btn--brass" ${state.lbBusy ? "disabled" : ""}>${state.lbBusy ? "Connecting…" : "Connect"}</button>
+  </form>${state.lbError ? `<p class="error-text">${h(state.lbError)}</p>` : ""}`;
+}
+function lbConnectCard() {
+  return `<section class="lbcard">
+    ${LB_MARK}
+    <h2 class="lbcard__title">Filament gets smarter with your Letterboxd</h2>
+    <ul class="benefits">${LB_BENEFITS.map(([i, ti, d]) => `<li><span class="benefits__icon">${LB_ICONS[i]}</span><div><b>${ti}</b><span>${d}</span></div></li>`).join("")}</ul>
+    ${lbConnectForm()}
+    <p class="lbcard__fine">Just your username — no password. Filament reads only your public diary.</p>
+  </section>`;
+}
+function lbImportGuide(lead) {
+  return `<section class="lbimport">
+    <h3>${lead ? "Next: bring in your full history" : "Import your full history"}</h3>
+    <p>${lead ? "Connecting reads your most recent diary entries. Your full export adds every film you’ve ever rated — and your watchlist — so all your favorites are followed. It takes about a minute." : "Adds every film you’ve ever rated, plus your watchlist."}</p>
+    <ol class="guide">
+      <li><span class="guide__n">1</span><div><div>Open your Letterboxd data page and sign in.</div><a class="btn btn--sm" href="https://letterboxd.com/settings/data/" target="_blank" rel="noopener">Open Letterboxd ↗</a></div></li>
+      <li><span class="guide__n">2</span><div><div>Tap <span class="mock-btn">Export your data</span>. A .zip file downloads — on iPhone it goes to <b>Files → Downloads</b>.</div></div></li>
+      <li><span class="guide__n">3</span><div><div>Come back here and choose that file.</div><label class="btn btn--sm btn--brass file-btn">Choose export file<input type="file" accept=".zip,application/zip" data-action="lb-import" hidden></label></div></li>
+    </ol>
+    <p class="group-foot">Only titles, years, ratings, watch dates and your watchlist are kept — never your profile, email or reviews.</p>
+  </section>`;
+}
 function viewLetterboxd() {
   const l = lbData(), cfg = lbCfg();
-  const connected = l?.films && Object.keys(l.films).length && cfg.enabled !== false;
-  const importBtn = `<label class="btn btn--brass file-btn">${connected ? "Re-import export" : "Import your Letterboxd export"}<input type="file" accept=".zip,application/zip" data-action="lb-import" hidden></label>`;
-  if (!connected) {
-    return `<div class="empty lb-empty"><h3>Bring your Letterboxd</h3>
-      <p>Follow every film you’ve rated highly, see what you’ve already watched, and get suggestions for what’s playing.</p>
-      <div class="actions" style="justify-content:center;margin-top:18px">${importBtn}</div>
-      <p class="group-foot" style="margin-top:16px">On letterboxd.com: <b>Settings → Data → Export your data</b>. Upload the .zip here — only film titles, years, ratings and your watchlist are kept.</p></div>`;
+  if (!lbConnected()) {
+    return `${lbConnectCard()}
+      <details class="more lb-alt"><summary>Prefer to import your full history right away?</summary>${lbImportGuide(false)}</details>`;
   }
+  const importBtn = `<label class="btn btn--sm file-btn">Re-import<input type="file" accept=".zip,application/zip" data-action="lb-import" hidden></label>`;
   const films = Object.values(l.films);
   const rated = films.filter((f) => f.r).length, wl = films.filter((f) => f.wl).length;
   const follows = interests()._letterboxd || [];
@@ -477,14 +517,15 @@ function viewLetterboxd() {
   const loved = lovedDirectors(l).slice(0, 12);
   const sw = (key, on, lbl) => `<label class="switch"><input type="checkbox" data-action="lb-set" data-key="${key}" ${on ? "checked" : ""} aria-label="${h(lbl)}"><span></span></label>`;
   return `<div class="group">
-      <div class="row"><div class="monogram gilt">LB</div><div class="row__main"><div class="row__title">${h(cfg.username || "Letterboxd")}</div>
-        <div class="row__sub">${rated} rated · ${films.filter((f) => f.w).length} watched · ${wl} on watchlist${l.rss_synced_at ? ` · synced ${h(fmtWhen(l.rss_synced_at))}` : ""}</div></div>${importBtn}</div>
+      <div class="row">${LB_MARK}<div class="row__main"><div class="row__title">${h(cfg.username || "Letterboxd")} <span class="tag tag--following">Connected</span></div>
+        <div class="row__sub">${rated} rated · ${films.filter((f) => f.w).length} watched${wl ? ` · ${wl} on watchlist` : ""}${l.rss_synced_at ? ` · synced ${h(fmtWhen(l.rss_synced_at))}` : ""}</div></div>${l.imported_at ? importBtn : ""}</div>
       <div class="row"><div class="row__main"><div class="row__title">Follow films I rated</div><div class="row__sub">${follows.length} films followed automatically${n ? ` · <span class="interest__count">${plural(n, "upcoming screening")}</span>` : ""}</div></div>
         <div class="seg">${[[5, "★★★★★"], [4.5, "★★★★½+"], [4, "★★★★+"]].map(([v, l2]) => `<button data-action="lb-min" data-v="${v}" aria-pressed="${minR === v}">${l2}</button>`).join("")}</div></div>
       ${recentRow()}
       <div class="row"><div class="row__main"><div class="row__title">Also follow my watchlist</div><div class="row__sub">${plural(wl, "film")} you want to see</div></div>${sw("include_watchlist", !!cfg.include_watchlist, "Follow watchlist")}</div>
       <div class="row"><div class="row__main"><div class="row__title">Sync new ratings every morning</div><div class="row__sub">Reads your public Letterboxd diary, so new favorites are followed automatically</div></div>${sw("sync_rss", cfg.sync_rss !== false, "Sync daily")}</div>
     </div>
+    ${l.imported_at ? "" : lbImportGuide(true)}
     ${loved.length ? `<div class="group-label">Directors you love</div>
     <div class="group">${loved.map((d) => {
       const c = { name: d.name, tmdb: d.tmdb };
@@ -531,6 +572,7 @@ function viewWatchlist() {
         <button data-action="tab" data-tab="films" aria-pressed="${!isDir && !isLb}">Films · ${s.films.length}</button>
         <button data-action="tab" data-tab="letterboxd" aria-pressed="${isLb}">Letterboxd</button>
       </div></header>
+    ${!isLb && !lbConnected() && !isLocal() ? `<button class="lb-banner" data-action="tab" data-tab="letterboxd">${LB_MARK}<span class="lb-banner__text"><b>Connect Letterboxd</b><span>Follow every film you’ve rated highly — automatically</span></span><span class="lb-banner__go" aria-hidden="true">›</span></button>` : ""}
     ${isLb ? viewLetterboxd() : `<div class="search">${ICON.search}<input id="q" type="search" autocomplete="off" placeholder="${isDir ? "Add a director — e.g. Stanley Kubrick" : "Add a film — e.g. Eyes Wide Shut"}" value="${h(state.query)}" aria-label="Search">
       ${resultsBlock()}</div>
     ${list}`}
@@ -657,7 +699,10 @@ function viewSettings() {
     ${filtersBlock(n.filters || {})}
     <p class="group-foot">Filters only change which screenings are emailed — everything you follow still appears in the app. When formats are chosen, screenings that don’t list a format are skipped.</p>
 
-    ${lbData()?.films && lbCfg().enabled !== false ? `<div class="group-label">Letterboxd</div>
+    ${!lbConnected() && !isLocal() ? `<div class="group-label">Letterboxd</div>
+    <div class="group"><div class="row">${LB_MARK}<div class="row__main"><div class="row__title">Connect Letterboxd</div><div class="row__sub">Follow every film you’ve rated highly, get suggestions that know your taste, and never be reminded about what you just saw. Just your username.</div></div>
+      <button class="btn btn--sm btn--brass" data-action="lb-start">Connect</button></div></div>` : ""}
+    ${lbConnected() ? `<div class="group-label">Letterboxd</div>
     <div class="group">${recentRow()}
       <div class="row"><div class="row__main"><div class="row__title">Also follow my watchlist</div><div class="row__sub">Films on your Letterboxd watchlist appear in Upcoming and are emailed like favorites</div></div>
         <label class="switch"><input type="checkbox" data-action="lb-set" data-key="include_watchlist" ${lbCfg().include_watchlist ? "checked" : ""} aria-label="Follow watchlist"><span></span></label></div></div>
@@ -741,9 +786,9 @@ function viewHelp() {
 const featuresList = () => {
   const feat = (n, ti, d) => `<li class="feature"><span class="feature__n">${n}</span><div><div class="feature__t">${ti}</div><div class="feature__d">${d}</div></div></li>`;
   return `<ol class="features">
-      ${feat("01", "Follow anyone", "A whole director — every film by David Lynch — or a single title like <i>Eyes Wide Shut</i>.")}
-      ${feat("02", "See what’s playing", "Every upcoming NYC screening of what you follow, with venue, date, showtimes and format.")}
-      ${feat("03", "Get told first", "One email when something new is scheduled, moved or cancelled. Never the same news twice.")}
+      ${feat("01", "Tell it what you love", "A director — every film David Lynch made — a single title, or your whole Letterboxd.")}
+      ${feat("02", "Get told the moment it’s playing", "A notification on your phone or an email as soon as a New York theater schedules it. Changes, cancellations and last chances too — never the same news twice.")}
+      ${feat("03", "See everything at a glance", "Every upcoming screening of what you follow, plus a search of everything playing in the city.")}
     </ol>`;
 };
 
@@ -755,8 +800,8 @@ function welcome(errMsg) {
   return `<div class="welcome"><div class="welcome__card">
     ${tubesArt()}
     <div class="eyebrow">Filament · New York</div>
-    <h1>Is your favorite film playing in New York?</h1>
-    <p class="welcome__lede">Follow the directors and films you love. Filament reads New York’s repertory and arthouse listings every morning, and tells you the moment one of yours is scheduled.</p>
+    <h1>Know the moment your favorite films play in New York.</h1>
+    <p class="welcome__lede">Tell Filament the directors and films you love. When a New York theater schedules one, you get a notification or an email — right away, and only once.</p>
     ${featuresList()}
     ${wireEl()}
     <h2 class="welcome__signin">Filament is invite-only</h2>
@@ -796,8 +841,8 @@ function joinScreen() {
   return `<div class="welcome"><div class="welcome__card">
     ${tubesArt()}
     <div class="eyebrow">Filament · New York</div>
-    <h1>Is your favorite film playing in New York?</h1>
-    <p class="welcome__lede">${from ? `${h(from)} invited you to Filament.` : "You’re invited to Filament."} Follow the directors and films you love, and get told the moment one is scheduled in New York.</p>
+    <h1>Know the moment your favorite films play in New York.</h1>
+    <p class="welcome__lede">${from ? `${h(from)} invited you to Filament.` : "You’re invited to Filament."} Tell it the directors and films you love — when a New York theater schedules one, you’ll get a notification or an email right away.</p>
     ${featuresList()}
     ${wireEl()}
     ${j.sent ? `<h2 class="welcome__signin">Check your email</h2><p class="welcome__sent" role="status">${h(j.sent)} Open it on this device and tap <b>Open my Filament</b>.</p>`
@@ -1084,6 +1129,80 @@ async function importLetterboxd(file) {
   } catch (e) {
     toast(e.message || "Couldn’t read that file");
   }
+}
+
+/* ------------------------------------------------- Letterboxd: connect by username */
+const friendsApi = () => (state.src?.friend ? state.src.api : settings().friends_api || FRIENDS_API);
+async function connectLetterboxd(raw) {
+  const user = String(raw || "").trim();
+  if (!user) return;
+  Object.assign(state, { lbBusy: true, lbError: null, lbUser: user });
+  render();
+  try {
+    const feed = await letterboxdFeed(friendsApi(), user);
+    const { data } = mergeFeed(lbData(), feed.entries);
+    await state.src.writeFile("letterboxd.json", data, `Connect Letterboxd (${feed.user})`);
+    state.data = { ...state.data, letterboxd: data };
+    await saveSettings((s) => {
+      s.letterboxd = { min_rating: 4.5, include_watchlist: false, recent_months: 4, ...(s.letterboxd || {}), enabled: true, sync_rss: true, username: feed.user };
+    }, "Connect Letterboxd");
+    Object.assign(state, { lbBusy: false, lbUser: "" });
+    render();
+    const n = followList(data, lbCfg()).length;
+    toast(`Connected${feed.name ? ` as ${feed.name}` : ""} — following ${plural(n, "film")} from your diary so far`);
+  } catch (e) { Object.assign(state, { lbBusy: false, lbError: e.message }); render(); }
+}
+document.addEventListener("submit", (ev) => {
+  const f = ev.target.closest?.(".lb-connect");
+  if (!f) return;
+  ev.preventDefault();
+  connectLetterboxd(new FormData(f).get("user"));
+});
+
+/* ------------------------------------------------------- getting set up */
+const setupHidden = () => { try { return localStorage.getItem("filament.setup") === "hidden"; } catch { return false; } };
+function playingSoonDirectors(n = 8) {
+  const today = todayISO(), until = nyDate(new Date(Date.now() + 30 * 864e5));
+  const m = new Map();
+  for (const o of Object.values(D().listings?.occurrences || {})) {
+    if (o.date < today || o.date > until) continue;
+    for (const f of o.films || []) for (const d of f.directors || []) {
+      if (!d.name || isFollowingCredit(d)) continue;
+      const k = d.tmdb || d.name;
+      const x = m.get(k) || { ...d, ids: new Set() };
+      x.ids.add(o.screening_id || o.key);
+      m.set(k, x);
+    }
+  }
+  return [...m.values()].sort((a, b) => b.ids.size - a.ids.size).slice(0, n);
+}
+function setupCard() {
+  if (isLocal() || setupHidden()) return "";
+  const s = settings();
+  const follow = s.directors.length + s.films.length + (interests()._letterboxd || []).length > 0;
+  if (!isFriend() && follow) return "";                   // the owner is long set up
+  const lb = lbConnected(), alerts = !!pushState.subscribed;
+  const done = [follow, lb, alerts].filter(Boolean).length;
+  if (done === 3) return "";
+  const step = (ok, n, title, body) => `<li class="setup__step${ok ? " setup__step--done" : ""}"><span class="setup__check" aria-hidden="true">${ok ? "✓" : n}</span><div class="setup__main"><div class="setup__t">${title}</div>${ok ? "" : body}</div></li>`;
+  const picks = playingSoonDirectors();
+  const p = a2hsPlatform();
+  const alertBody = p === "ios" && !isStandalone()
+    ? `<div class="setup__d">Phone notifications work from your Home Screen. In Safari tap <span class="a2hs__glyph">${SHARE_GLYPH}</span> <b>Share</b> → <b>Add to Home Screen</b>, open Filament from there, and turn them on. Email alerts are already on.</div>`
+    : pushSupported() && settings().push?.vapid_public
+      ? `<div class="setup__d">Get a notification the moment something you follow is scheduled. Email alerts are already on.</div><button class="btn btn--sm btn--brass" data-action="push-on">Turn on notifications</button>`
+      : `<div class="setup__d">Email alerts are on. For phone notifications, open Filament on your iPhone and add it to your Home Screen.</div>`;
+  return `<section class="setup" aria-label="Get set up">
+    <div class="setup__head"><div><div class="eyebrow">Get set up</div><div class="setup__count">${done} of 3 done</div></div>
+      <button class="icon-btn" data-action="setup-hide" aria-label="Hide setup">${ICON.close}</button></div>
+    <ol class="setup__steps">
+      ${step(follow, 1, "Follow a director or film", `<div class="setup__d">You’ll be told whenever one is scheduled in New York.${picks.length ? " Playing this month — tap to follow:" : ""}</div>
+        ${picks.length ? `<div class="setup__picks">${picks.map((d) => `<button class="chip chip--btn" data-action="follow-dir" data-name="${h(d.name)}" data-tmdb="${h(d.tmdb || "")}" data-slug="${h(d.slug || "")}">+ ${h(d.name)}</button>`).join("")}</div>` : ""}
+        <button class="btn btn--sm" data-action="nav" data-view="watch">Search for anyone</button>`)}
+      ${step(lb, 2, "Connect Letterboxd", `<div class="setup__d">Follows every film you’ve rated highly, and powers suggestions. Just your username.</div>${lbConnectForm(true)}`)}
+      ${step(alerts, 3, "Get alerts on your phone", alertBody)}
+    </ol>
+  </section>`;
 }
 
 /* ------------------------------------------------------- one-tap follow */
@@ -1756,6 +1875,11 @@ async function onAction(el, ev) {
   if (a === "fb-open") return openFeedback();
   if (a === "fb-kind") { el.parentElement.querySelectorAll("button").forEach((b) => { const on = b === el; b.setAttribute("aria-pressed", on); b.setAttribute("aria-checked", on); }); return; }
   if (a === "fb-done") return feedbackDone(el.dataset.id);
+  if (a === "setup-hide") {
+    try { localStorage.setItem("filament.setup", "hidden"); } catch { /* ignore */ }
+    render(); toast("Hidden — everything is still in Settings");
+    return;
+  }
   if (a === "a2hs-dismiss") {
     try { localStorage.setItem("filament.a2hs", "no"); } catch { /* ignore */ }
     const card = el.closest(".a2hs");
@@ -1989,7 +2113,7 @@ function bindWelcome() {
 applyTheme();
 // Instant launch & offline: cache the app itself (never your data).
 if ("serviceWorker" in navigator && !isLocal()) {
-  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261109222816").catch(() => {}));
+  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261109234551").catch(() => {}));
 }
 // Friend invite links: #invite=<key>&api=<friends service> (the fragment never reaches any server).
 (function acceptInvite() {

@@ -1,7 +1,7 @@
 // Letterboxd in the app: read an export .zip on-device, decide which films are
 // followed automatically, mark films you've seen, and suggest "For you".
 // Mirrors monitor/letterboxd.py (same keys, same thresholds, same aliases).
-import { fold, nameKey, titleKey } from "./match.js?v=20261109222816";
+import { fold, nameKey, titleKey } from "./match.js?v=20261109234551";
 
 export const filmKey = (title, year) => `${titleKey(title)}|${year || ""}`;
 
@@ -41,6 +41,26 @@ export function followList(data, cfg, today) {
     if (why) out.push({ id: `lb-${k}`, title: f.t, year: f.y, aka: aliases(f.t), label: why, rating: f.r || null });
   }
   return out;
+}
+
+/** Merge recent diary entries (from the public feed) — mirrors monitor/letterboxd.py sync_rss. */
+export function mergeFeed(data, entries) {
+  const out = data?.films ? structuredClone(data) : { version: 1, films: {} };
+  let changed = 0;
+  for (const e of entries || []) {
+    if (!e.t) continue;
+    const k = filmKey(e.t, e.y);
+    const before = JSON.stringify(out.films[k] || null);
+    const rec = out.films[k] || (out.films[k] = { t: e.t, y: e.y || null });
+    if (e.r) rec.r = e.r;
+    if (e.tmdb) rec.tmdb = e.tmdb;
+    rec.w = true;
+    delete rec.wl;                                   // watched films leave the watchlist
+    if (e.watched && (!rec.lw || e.watched > rec.lw)) rec.lw = e.watched;
+    if (JSON.stringify(rec) !== before) changed++;
+  }
+  out.rss_synced_at = new Date().toISOString().replace(/\.\d{3}Z$/, "+00:00");
+  return { data: out, changed };
 }
 
 /** The Letterboxd record for a screened film (exact year, then ±1). */

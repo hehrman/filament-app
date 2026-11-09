@@ -1,7 +1,7 @@
 {
   "name": "Filament",
   "short_name": "Filament",
-  "description": "Is your favorite film or director playing in New York? Get notified.",
+  "description": "Get told the moment the films and directors you love are playing in New York.",
   "start_url": "./",
   "display": "standalone",
   "background_color": "#120F0C",

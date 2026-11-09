@@ -186,6 +186,7 @@ async function publicCall(api, path, init = {}) {
 }
 export const joinInfo = (api, key) => publicCall(api, `/api/join-info?join=${encodeURIComponent(key)}`);
 export const joinFilament = (api, key, name, email) => publicCall(api, "/api/join", { method: "POST", body: JSON.stringify({ join: key, name, email }) });
+export const letterboxdFeed = (api, user) => publicCall(api, `/api/letterboxd?user=${encodeURIComponent(user)}`);
 export const emailSignIn = (api, email) => publicCall(api, "/api/signin", { method: "POST", body: JSON.stringify({ email }) });
 
 export function makeSource(conn) {
