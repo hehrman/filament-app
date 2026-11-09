@@ -1,11 +1,11 @@
-import { creditIsDirector, fold, matchFilm, matchOccurrence } from "./match.js?v=20261109194837";
+import { creditIsDirector, fold, matchFilm, matchOccurrence } from "./match.js?v=20261109200723";
 import {
   ApiError, cached, forgetConnection, isLocal, loadAll, loadConnection, makeSource, mutateSettings, saveConnection,
-} from "./data.js?v=20261109194837";
-import { followList, forYou, importExport, lookup, lovedDirectors, stars } from "./letterboxd.js?v=20261109194837";
+} from "./data.js?v=20261109200723";
+import { followList, forYou, importExport, lookup, lovedDirectors, recentlyWatched, stars } from "./letterboxd.js?v=20261109200723";
 import {
   filmographyFor, searchCatalog, searchWikidataDirectors, searchWikidataFilms, slugFromCatalog,
-} from "./search.js?v=20261109194837";
+} from "./search.js?v=20261109200723";
 
 const TZ = "America/New_York";
 const app = document.getElementById("app");
@@ -357,7 +357,7 @@ function forYouBlock() {
   const l = lbData();
   if (!l?.films || lbCfg().enabled === false) return "";
   const followed = (o) => matchOccurrence(o, interests()).length > 0;
-  const picks = forYou(Object.values(D().listings?.occurrences || {}), l, followed, todayISO());
+  const picks = forYou(Object.values(D().listings?.occurrences || {}), l, followed, todayISO(), lbCfg().recent_months);
   if (!picks.length) return "";
   return `<section class="foryou" aria-label="For you">
     <div class="foryou__head"><div><div class="eyebrow">Based on your Letterboxd</div><h2 class="section-title">For you</h2></div></div>
@@ -423,6 +423,17 @@ function resultsBlock() {
   return `<div class="results" role="listbox">${rows.join("")}${note}</div>`;
 }
 
+const RECENT_CHOICES = [[0, "Off"], [2, "2 mo"], [4, "4 mo"], [6, "6 mo"], [12, "1 yr"]];
+function recentRow() {
+  const cfg = lbCfg(), m = cfg.recent_months ?? 4;
+  const l = lbData();
+  const minR = Number(cfg.min_rating ?? 4.5);
+  const hidden = m ? Object.values(l?.films || {}).filter((f) => f.r >= minR && recentlyWatched(f, m)).length : 0;
+  return `<div class="row"><div class="row__main"><div class="row__title">Skip films I watched recently</div>
+      <div class="row__sub">${m ? `Not followed or suggested if you watched it in the last ${m === 12 ? "year" : `${m} months`}${hidden ? ` · ${plural(hidden, "film")} skipped right now` : ""}` : "Off — every favorite is followed, however recently you saw it"}</div></div>
+    <div class="seg">${RECENT_CHOICES.map(([v, t]) => `<button data-action="lb-recent" data-v="${v}" aria-pressed="${m === v}">${t}</button>`).join("")}</div></div>`;
+}
+
 function viewLetterboxd() {
   const l = lbData(), cfg = lbCfg();
   const connected = l?.films && Object.keys(l.films).length && cfg.enabled !== false;
@@ -445,6 +456,7 @@ function viewLetterboxd() {
         <div class="row__sub">${rated} rated · ${films.filter((f) => f.w).length} watched · ${wl} on watchlist${l.rss_synced_at ? ` · synced ${h(fmtWhen(l.rss_synced_at))}` : ""}</div></div>${importBtn}</div>
       <div class="row"><div class="row__main"><div class="row__title">Follow films I rated</div><div class="row__sub">${follows.length} films followed automatically${n ? ` · <span class="interest__count">${plural(n, "upcoming screening")}</span>` : ""}</div></div>
         <div class="seg">${[[5, "★★★★★"], [4.5, "★★★★½+"], [4, "★★★★+"]].map(([v, l2]) => `<button data-action="lb-min" data-v="${v}" aria-pressed="${minR === v}">${l2}</button>`).join("")}</div></div>
+      ${recentRow()}
       <div class="row"><div class="row__main"><div class="row__title">Also follow my watchlist</div><div class="row__sub">${plural(wl, "film")} you want to see</div></div>${sw("include_watchlist", !!cfg.include_watchlist, "Follow watchlist")}</div>
       <div class="row"><div class="row__main"><div class="row__title">Sync new ratings every morning</div><div class="row__sub">Reads your public Letterboxd diary, so new favorites are followed automatically</div></div>${sw("sync_rss", cfg.sync_rss !== false, "Sync daily")}</div>
     </div>
@@ -530,6 +542,7 @@ function viewArchive() {
         <span class="ledger-main">${posterImg(d.poster, "row__poster")}<span><span class="row__title">${h(d.films.map((x) => x.title).join(" + "))}</span><span class="row__sub" style="display:block">${h(d.venue)} · ${h(directorsOf(d.films[0]))}${d.showtimes?.length ? ` · ${h(d.showtimes.join(", "))}` : ""}</span></span></span>
         ${statusTag(d)}</button>`).join("")}</div>`
       : `<div class="empty"><h3>Nothing here</h3><p>${f === "removed" ? "No screening you follow has been cancelled or moved." : "Screenings appear here as Filament discovers them."}</p></div>`}
+    ${rows.length ? `<div class="fin" aria-hidden="true"><span>F</span><span>I</span><span>N</span></div>` : ""}
   </div>`;
 }
 
@@ -607,6 +620,10 @@ function viewSettings() {
     <div class="group-label">What gets emailed</div>
     ${filtersBlock(n.filters || {})}
     <p class="group-foot">Filters only change which screenings are emailed — everything you follow still appears in the app. When formats are chosen, screenings that don’t list a format are skipped.</p>
+
+    ${lbData()?.films && lbCfg().enabled !== false ? `<div class="group-label">Letterboxd</div>
+    <div class="group">${recentRow()}</div>
+    <p class="group-foot">More Letterboxd options are in Watchlist → Letterboxd.</p>` : ""}
 
     <div class="group-label">Schedule</div>
     <div class="group">
@@ -977,6 +994,18 @@ function secretSearch(q) {
   else if (k === "the owls are not what they seem") {
     flicker();
     if (!reducedMotion()) { document.body.classList.add("owls"); setTimeout(() => document.body.classList.remove("owls"), 3200); }
+  } else if (k === "gotta light") {
+    document.querySelectorAll(".lamp").forEach((l, i) => setTimeout(() => blowLamp(l), i * 140));
+  } else if (k === "asa nisi masa" || k === "8 and a half" || k === "otto e mezzo") {
+    toast("Asa Nisi Masa");
+    if (!reducedMotion()) overlay("ring", Array.from({ length: 12 }, (_, i) => `<span style="--i:${i}">${lamp("on")}</span>`).join(""), 6200);
+  } else if (k === "la dolce vita") {
+    toast("Marcello, come here!");
+    if (!reducedMotion()) { document.body.classList.add("dolce"); setTimeout(() => document.body.classList.remove("dolce"), 5200); }
+  } else if (k === "breathless" || k === "a bout de souffle") {
+    if (!reducedMotion()) { document.body.classList.add("jumpcut"); setTimeout(() => document.body.classList.remove("jumpcut"), 1300); }
+  } else if (k === "godard" || k === "pierrot le fou") {
+    if (!reducedMotion()) overlay("intertitles", ["UN", "FILM", "DE", "FILAMENT"].map((w, i) => `<b style="--i:${i}">${w}</b>`).join(""), 3400);
   } else if (k === "fire walk with me") {
     flicker();
     if (!reducedMotion()) {
@@ -986,6 +1015,15 @@ function secretSearch(q) {
       setTimeout(() => floor.remove(), 4200);
     }
   }
+}
+
+function overlay(cls, html, ms) {
+  const o = document.createElement("div");
+  o.className = `egg egg--${cls}`;
+  o.setAttribute("aria-hidden", "true");
+  o.innerHTML = html;
+  document.body.append(o);
+  setTimeout(() => o.remove(), ms);
 }
 
 // Sheets follow your finger down and close past a threshold.
@@ -1201,6 +1239,11 @@ async function onAction(el, ev) {
   }
   if (a === "find-clear") { state.find = ""; return render(); }
   if (a === "share") { const d = findItem(el.dataset.key); if (d) shareScreening(d); return; }
+  if (a === "lb-recent") {
+    const v = Number(el.dataset.v);
+    return saveSettings((s) => { s.letterboxd = { ...(s.letterboxd || {}), recent_months: v }; }, "Letterboxd: recently-watched rule",
+      v ? `Skipping films you watched in the last ${v === 12 ? "year" : `${v} months`}` : "Following every favorite");
+  }
   if (a === "lb-min") return saveSettings((s) => { s.letterboxd = { ...(s.letterboxd || {}), min_rating: Number(el.dataset.v) }; }, "Letterboxd: change rating threshold", `Following films rated ${stars(Number(el.dataset.v))}${Number(el.dataset.v) < 5 ? " and up" : ""}`);
   if (a === "lb-off") {
     if (!confirm("Stop following films from Letterboxd? Your imported data stays saved, and you can turn it back on any time.")) return;

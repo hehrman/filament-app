@@ -1,7 +1,7 @@
 // Letterboxd in the app: read an export .zip on-device, decide which films are
 // followed automatically, mark films you've seen, and suggest "For you".
 // Mirrors monitor/letterboxd.py (same keys, same thresholds, same aliases).
-import { fold, nameKey, titleKey } from "./match.js?v=20261109194837";
+import { fold, nameKey, titleKey } from "./match.js?v=20261109200723";
 
 export const filmKey = (title, year) => `${titleKey(title)}|${year || ""}`;
 
@@ -22,12 +22,20 @@ export function aliases(title) {
   return out;
 }
 
-export function followList(data, cfg) {
+/** Watched within the last `months` months (default 4; 0 = rule off). */
+export function recentlyWatched(f, months, today = new Date()) {
+  const m = months === undefined || months === null ? 4 : Number(months);
+  if (!m || !f?.lw) return false;
+  return (today - new Date(`${f.lw}T12:00:00`)) / 864e5 < m * 30.44;
+}
+
+export function followList(data, cfg, today) {
   if (!data?.films || !cfg || cfg.enabled === false) return [];
   const minR = Number(cfg.min_rating ?? 4.5), wl = !!cfg.include_watchlist;
   const out = [];
   for (const [k, f] of Object.entries(data.films)) {
     let why = null;
+    if (recentlyWatched(f, cfg.recent_months, today)) continue;
     if (f.r && f.r >= minR) why = `You rated it ${stars(f.r)} on Letterboxd`;
     else if (wl && f.wl) why = "On your Letterboxd watchlist";
     if (why) out.push({ id: `lb-${k}`, title: f.t, year: f.y, aka: aliases(f.t), label: why, rating: f.r || null });
@@ -66,7 +74,7 @@ export function lovedDirectors(data) {
  * Suggestions from everything playing in NYC that you don't already follow:
  * films you rated 4★, films on your watchlist, films by directors you love.
  */
-export function forYou(occurrences, data, isFollowed, today) {
+export function forYou(occurrences, data, isFollowed, today, recentMonths) {
   if (!data?.films) return [];
   const loved = new Map(lovedDirectors(data).flatMap((d) => [[d.tmdb ? `t${d.tmdb}` : "", d], [`n${nameKey(d.name)}`, d]]).filter(([k]) => k));
   const groups = new Map();
@@ -74,6 +82,7 @@ export function forYou(occurrences, data, isFollowed, today) {
     if (o.status !== "active" || o.date < today || isFollowed(o)) continue;
     for (const f of o.films) {
       const rec = lookup(data, f);
+      if (rec && recentlyWatched(rec, recentMonths)) continue;   // you just saw it
       let score = 0, why = "";
       if (rec?.r >= 4) { score = 3 + rec.r; why = `You rated it ${stars(rec.r)}`; }
       else if (rec?.wl) { score = 6; why = "On your Letterboxd watchlist"; }
@@ -157,7 +166,7 @@ export function parseCSV(text) {
 
 /** Build letterboxd.json from an export, keeping earlier director lookups. */
 export async function importExport(file, previous) {
-  const files = await readZip(await file.arrayBuffer(), ["ratings.csv", "watched.csv", "watchlist.csv", "profile.csv"]);
+  const files = await readZip(await file.arrayBuffer(), ["ratings.csv", "watched.csv", "watchlist.csv", "diary.csv", "profile.csv"]);
   if (!files["ratings.csv"] && !files["watched.csv"]) throw new Error("This doesn’t look like a Letterboxd export (no ratings.csv or watched.csv inside).");
   const films = {};
   const year = (y) => parseInt(String(y).slice(0, 4), 10) || null;
@@ -174,6 +183,12 @@ export async function importExport(file, previous) {
   for (const r of parseCSV(files["ratings.csv"] || "")) {
     const x = parseFloat(r.Rating);
     put(r.Name, r.Year, { w: true, ...(x > 0 && x <= 5 ? { r: x } : {}) });
+  }
+  for (const r of parseCSV(files["diary.csv"] || "")) {
+    const d = (r["Watched Date"] || r.Date || "").trim();
+    if (!/^\d{4}-\d\d-\d\d$/.test(d)) continue;
+    const rec = put(r.Name, r.Year, { w: true });
+    if (rec && (!rec.lw || d > rec.lw)) rec.lw = d;
   }
   for (const r of parseCSV(files["watchlist.csv"] || "")) {
     const rec = put(r.Name, r.Year, {});

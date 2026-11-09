@@ -732,3 +732,38 @@ body { overscroll-behavior-y: contain; }
   .row > .seg { width: 100%; }
   .row > .seg button { flex: 1; }
 }
+
+/* ---- Fellini & Godard */
+.egg { position: fixed; inset: 0; z-index: 90; pointer-events: none; display: grid; place-items: center; }
+.egg--ring { animation: fade 6.2s ease-in-out reverse both; animation-name: ring-life; }
+@keyframes ring-life { 0%, 100% { opacity: 0 } 12%, 85% { opacity: 1 } }
+.egg--ring > span {
+  position: absolute; left: 50%; top: 50%; width: 34px; height: 34px; margin: -17px;
+  transform: rotate(calc(var(--i) * 30deg)) translateY(-130px) rotate(calc(var(--i) * -30deg));
+  animation: parade 6.2s linear both;
+}
+.egg--ring > span .lamp { width: 34px; height: 34px; }
+.egg--ring > span .lamp::before { opacity: 1; animation: breathe 1.2s ease-in-out calc(var(--i) * 100ms) infinite; }
+@keyframes parade {
+  from { transform: rotate(calc(var(--i) * 30deg)) translateY(-130px) rotate(calc(var(--i) * -30deg)); }
+  to { transform: rotate(calc(var(--i) * 30deg + 180deg)) translateY(-130px) rotate(calc(var(--i) * -30deg - 180deg)); }
+}
+.dolce .app, .dolce .tabbar { filter: grayscale(1) contrast(1.12); transition: filter 1.2s ease; }
+.app, .tabbar { transition: filter 1.2s ease; }
+.jumpcut .main { animation: jumpcut 1.3s steps(1, end); }
+@keyframes jumpcut {
+  0% { transform: none } 14% { transform: translate(-14px, 6px) scale(1.04) } 28% { transform: translate(10px, -4px) }
+  43% { transform: scale(1.08) translateY(18px) } 57% { transform: translate(-6px, -10px) scale(.98) } 71% { transform: translateX(16px) } 86% { transform: none }
+}
+.egg--intertitles { background: #0b0b0b; animation: ring-life 3.4s steps(1, end) both; }
+.egg--intertitles b {
+  position: absolute; font: 800 min(26vw, 220px)/1 "Helvetica Neue", Helvetica, Arial, sans-serif; letter-spacing: -.04em;
+  opacity: 0; animation: card .58s steps(1, end) calc(var(--i) * .72s + .2s) forwards;
+}
+.egg--intertitles b:nth-child(4n+1) { color: #E3262E; }
+.egg--intertitles b:nth-child(4n+2) { color: #F4F1EA; }
+.egg--intertitles b:nth-child(4n+3) { color: #1F4FC4; }
+.egg--intertitles b:nth-child(4n) { color: #E3262E; font-size: min(17vw, 150px); }
+@keyframes card { 0% { opacity: 1 } 100% { opacity: 0 } }
+.fin { display: flex; justify-content: center; gap: 2px; margin: 40px 0 10px; font: 800 13px/1 "Helvetica Neue", Helvetica, Arial, sans-serif; letter-spacing: .1em; opacity: .7; }
+.fin span:nth-child(1) { color: #E3262E; } .fin span:nth-child(2) { color: var(--text); } .fin span:nth-child(3) { color: #3B6BE0; }
