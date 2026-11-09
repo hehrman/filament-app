@@ -10,6 +10,8 @@
 const API = "https://api.github.com";
 const CFG_KEY = "filament.connection.v1";
 const CACHE_KEY = "filament.cache.v1";
+// The friends service (sign-up, sign-in links, feedback). Not personal data — just where the service lives.
+export const FRIENDS_API = "https://friends.filament-nyc.com";
 const FILES = ["settings.json", "status.json", "history.json", "listings.json", "catalog.json", "letterboxd.json", "people.json"];
 
 const safe = {
@@ -160,17 +162,31 @@ class FriendSource {
     if (!res.ok) throw new ApiError(j.message || `Filament said ${res.status}`, res.status);
     return j;
   }
-  async verify() { const r = await this.call("/api/whoami"); this.name = r.name; this.label = `${r.name}’s Filament`; return r; }
+  async verify() { const r = await this.call("/api/whoami"); this.name = r.name; this.owner = r.owner || ""; this.label = `${r.name}’s Filament`; return r; }
   async readFile(name) { return (await this.call(`/api/file?name=${encodeURIComponent(name)}`)).content; }
   async readSettingsWithSha() { const r = await this.call("/api/file?name=settings.json"); return { settings: r.content, sha: r.sha }; }
   async writeSettings(settings, sha) {
     return (await this.call("/api/file?name=settings.json", { method: "PUT", body: JSON.stringify({ content: settings, sha }) })).sha;
   }
   async writeFile(name, obj) { await this.call(`/api/file?name=${encodeURIComponent(name)}`, { method: "PUT", body: JSON.stringify({ content: obj }) }); }
+  async feedback(kind, text, context) { return this.call("/api/feedback", { method: "POST", body: JSON.stringify({ kind, text, context }) }); }
   async dispatch() { throw new ApiError("Checks run every morning at 9 — anything new appears then.", 403); }
   async activeRun() { return null; }
   async lastRun() { return null; }
 }
+
+/** Calls that work before anyone is signed in (joining, emailed sign-in links). */
+async function publicCall(api, path, init = {}) {
+  let res;
+  try { res = await fetch(`${api.replace(/\/$/, "")}${path}`, { ...init, cache: "no-store", headers: init.body ? { "Content-Type": "application/json" } : {} }); }
+  catch { throw new ApiError("Can’t reach Filament right now. Check your connection and try again.", 0); }
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok) throw new ApiError(j.message || `Filament said ${res.status}`, res.status);
+  return j;
+}
+export const joinInfo = (api, key) => publicCall(api, `/api/join-info?join=${encodeURIComponent(key)}`);
+export const joinFilament = (api, key, name, email) => publicCall(api, "/api/join", { method: "POST", body: JSON.stringify({ join: key, name, email }) });
+export const emailSignIn = (api, email) => publicCall(api, "/api/signin", { method: "POST", body: JSON.stringify({ email }) });
 
 export function makeSource(conn) {
   if (isLocal()) return new LocalSource();
@@ -180,7 +196,9 @@ export function makeSource(conn) {
 export async function loadAll(src) {
   const out = {};
   await Promise.all(FILES.map(async (f) => { out[f.replace(".json", "")] = await src.readFile(f).catch((e) => { if (f === "settings.json") throw e; return null; }); }));
-  if (!src.friend && !isLocal()) out.friends = await src.readFile("friends/index.json").catch(() => null);
+  if (!src.friend && !isLocal()) {
+    [out.friends, out.feedback] = await Promise.all(["friends/index.json", "feedback.json"].map((f) => src.readFile(f).catch(() => null)));
+  }
   safe.set(CACHE_KEY, { at: Date.now(), data: out });
   return out;
 }

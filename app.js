@@ -1,11 +1,12 @@
-import { creditIsDirector, fold, matchFilm, matchOccurrence } from "./match.js?v=20261109212316";
+import { creditIsDirector, fold, matchFilm, matchOccurrence } from "./match.js?v=20261109221817";
 import {
-  ApiError, cached, forgetConnection, isLocal, loadAll, loadConnection, makeSource, mutateSettings, saveConnection,
-} from "./data.js?v=20261109212316";
-import { followList, forYou, importExport, lookup, lovedDirectors, recentlyWatched, stars } from "./letterboxd.js?v=20261109212316";
+  ApiError, FRIENDS_API, cached, emailSignIn, forgetConnection, isLocal, joinFilament, joinInfo, loadAll, loadConnection,
+  makeSource, mutateSettings, saveConnection,
+} from "./data.js?v=20261109221817";
+import { followList, forYou, importExport, lookup, lovedDirectors, recentlyWatched, stars } from "./letterboxd.js?v=20261109221817";
 import {
   filmographyFor, searchCatalog, searchWikidataDirectors, searchWikidataFilms, slugFromCatalog,
-} from "./search.js?v=20261109212316";
+} from "./search.js?v=20261109221817";
 
 const TZ = "America/New_York";
 const app = document.getElementById("app");
@@ -404,8 +405,10 @@ function viewUpcoming() {
   const body = items.length ? dayGroups(items) : all.length ? `<div class="empty"><h3>Nothing ${h({ tonight: "tonight", weekend: "this weekend", week: "in the next 7 days" }[state.when])}</h3>
       <p>${plural(all.filter((d) => d.status === "active").length, "screening")} you follow ${all.length === 1 ? "is" : "are"} coming up later.</p>
       <div class="actions" style="justify-content:center;margin-top:14px"><button class="btn" data-action="when" data-v="all">Show all</button></div></div>` : `<div class="empty">${tubesArt(360, 150)}
-      <h3>No upcoming screenings yet</h3>
-      <p>${D().status?.last_success ? "Nothing you follow is playing in New York right now. Filament checks every morning and will email you the moment something appears." : "Once the first check runs, upcoming screenings of what you follow will appear here."}</p></div>`;
+      <h3>${names.length ? "No upcoming screenings yet" : "Start with someone you love"}</h3>
+      <p>${!names.length ? "Follow a director or a film — Filament shows every New York screening and tells you the moment a new one is scheduled. Or search above to see if something is playing right now."
+        : D().status?.last_success ? "Nothing you follow is playing in New York right now. Filament checks every morning and will email you the moment something appears." : "Once the first check runs, upcoming screenings of what you follow will appear here."}</p>
+      ${names.length ? "" : `<div class="actions" style="justify-content:center;margin-top:16px"><button class="btn btn--brass" data-action="nav" data-view="watch">Follow a director or film</button>${isFriend() ? `<button class="btn" data-action="lb-start">Import from Letterboxd</button>` : ""}</div>`}</div>`;
   return `<div class="page">
     ${state.find.trim().length >= 2
       ? `<header class="page-head"><div><div class="eyebrow">Search all of New York</div><h1 class="page-title">Is it playing?</h1><p class="page-sub">Every screening in New York — not just what you follow.</p></div></header>`
@@ -414,6 +417,7 @@ function viewUpcoming() {
     ${!state.find && recentSearches().length ? `<div class="recents"><span>Recent</span>${recentSearches().map((q) => `<button class="chip chip--btn recents__q" data-action="recent" data-q="${h(q)}">${h(q)}</button>`).join("")}<button class="recents__clear" data-action="recent-clear">Clear</button></div>` : ""}
     ${state.find.trim().length >= 2 ? viewFind() : `
     ${consoleBlock()}
+    ${names.length ? homeScreenTip() : ""}
     ${all.length ? `<div class="when seg" role="group" aria-label="When">${WHEN.map(([k, l]) => `<button data-action="when" data-v="${k}" aria-pressed="${state.when === k}">${l}</button>`).join("")}</div>` : ""}
     ${items.length ? `${wireEl()}<div style="height:22px"></div>` : ""}
     ${body}
@@ -631,7 +635,7 @@ function viewSettings() {
     <div class="group-label">Email notifications</div>
     <div class="group">
       <div class="row"><div class="row__main"><div class="row__title">Email alerts</div><div class="row__sub">At most one email a day, only when something changed</div></div>${sw("email_enabled", n.email_enabled !== false, "Email alerts")}</div>
-      <div class="row"><div class="row__main"><div class="row__title">Send to</div><div class="row__sub">Leave empty to use the address saved in GitHub</div></div>
+      <div class="row"><div class="row__main"><div class="row__title">Send to</div><div class="row__sub">${isFriend() ? "Where your alerts go" : "Leave empty to use the address saved in GitHub"}</div></div>
         <input type="email" id="recipient" value="${h(n.recipient || "")}" placeholder="you@example.com" style="width:min(240px,46vw)"></div>
       <div class="row"><div class="row__main"><div class="row__title">New screenings</div><div class="row__sub">A film you follow appears on the calendar</div></div>${sw("notify_new", n.notify_new !== false, "New screenings")}</div>
       <div class="row"><div class="row__main"><div class="row__title">Changes</div><div class="row__sub">Rescheduled dates, new or changed showtimes</div></div>${sw("notify_changes", n.notify_changes !== false, "Changes")}</div>
@@ -663,7 +667,7 @@ function viewSettings() {
     <div class="group">
       <div class="row"><div class="row__main"><div class="row__title">Daily check</div><div class="row__sub">Every morning, New York time</div></div><span style="font:600 15px var(--font-mono)">${h(fmtTime12(times[0] || "09:00"))}</span></div>
     </div>
-    <p class="group-foot">Checks run on GitHub’s computers, so your Mac and iPhone can be off. Daylight saving is handled automatically, and a check that GitHub starts late is still caught. Tap <b>Check now</b> on the Upcoming page any time you want an extra look.</p>
+    <p class="group-foot">${isFriend() ? "Checks run in the cloud, so your phone and computer can be off. Anything new appears here and in your email that morning." : "Checks run on GitHub’s computers, so your Mac and iPhone can be off. Daylight saving is handled automatically, and a check that GitHub starts late is still caught. Tap <b>Check now</b> on the Upcoming page any time you want an extra look."}</p>
 
     <div class="group-label">Recent checks</div>
     <div class="group">${runs.length ? runs.map((r) => `<div class="row"><div class="row__main"><div class="row__title">${h(fmtWhen(r.started))} <span style="color:var(--text-3);font-weight:400">· ${r.trigger === "manual" ? "Manual check" : "Daily check"}</span></div>
@@ -680,12 +684,16 @@ function viewSettings() {
 
     <div class="group-label">This device</div>
     <div class="group">
-      <div class="row"><div class="row__main"><div class="row__title">Connected to</div><div class="row__sub">${h(state.src?.label || "")}</div></div>
-        ${isLocal() ? "" : `<button class="btn btn--sm btn--danger" data-action="disconnect">Disconnect</button>`}</div>
-      ${isLocal() ? "" : `<div class="row"><div class="row__main"><div class="row__title">Sign in on another device</div><div class="row__sub">A private link that opens Filament already signed in. Treat it like a password.</div></div>
+      ${isFriend() ? `<div class="row"><div class="row__main"><div class="row__title">Signed in as ${h(state.src.name || "you")}</div><div class="row__sub">No password — this device stays signed in</div></div>
+        <button class="btn btn--sm btn--danger" data-action="disconnect">Sign out</button></div>`
+      : `<div class="row"><div class="row__main"><div class="row__title">Connected to</div><div class="row__sub">${h(state.src?.label || "")}</div></div>
+        ${isLocal() ? "" : `<button class="btn btn--sm btn--danger" data-action="disconnect">Disconnect</button>`}</div>`}
+      ${isLocal() ? "" : `<div class="row"><div class="row__main"><div class="row__title">Use Filament on another device</div><div class="row__sub">${isFriend() ? "Send yourself a link that opens your Filament, signed in. Or on the new device, choose “Email me a sign-in link.”" : "A private link that opens Filament already signed in. Treat it like a password."}</div></div>
         <button class="btn btn--sm" data-action="device-link">Share link</button></div>`}
+      ${homeScreenRow()}
     </div>
-    ${isFriend() || isLocal() ? "" : friendsBlock()}
+    ${isFriend() ? feedbackRow() : ""}
+    ${isFriend() || isLocal() ? "" : friendsBlock() + feedbackInbox()}
 
     <div class="group-label">About</div>
     <div class="group"><button class="row row--link" data-action="nav" data-view="help"><div class="row__main"><div class="row__title">About & Help</div><div class="row__sub">How Filament works, where listings come from, privacy, FAQ</div></div><span aria-hidden="true">›</span></button></div>
@@ -696,20 +704,22 @@ function viewSettings() {
 const FAQ = [
   ["What is Filament?", "A personal watch over New York’s repertory, arthouse and independent screenings. You tell it which directors and films you love; it checks the city’s screening listings every morning and tells you when one of them is scheduled."],
   ["Where do the listings come from?", "From Screen Slate, the independent daily guide to New York’s film screenings. Filament reads its public NYC listings once a day and links back to them. It covers repertory houses, museums and arthouse cinemas — Film Forum, Metrograph, BAM, IFC, Anthology, Film at Lincoln Center, MoMA, Alamo and many more — not every multiplex."],
-  ["How often does it check?", "Every morning at 9:00 AM New York time, on GitHub’s computers — your phone and laptop can be off. “Check now” on the Upcoming page runs an extra check any time; it takes about three minutes."],
+  ["How often does it check?", "Every morning at 9:00 AM New York time, in the cloud — your phone and laptop can be off."],
   ["How far ahead does it look?", "As far as the listings go. It reads every published date and keeps going until there’s a long stretch with nothing scheduled, so it automatically reaches further when theaters announce further ahead."],
   ["How does it know a film is by a director I follow?", "Each listing links its directors to a permanent ID number, so matching never depends on spelling. Individual films are matched by title (including alternate titles) and confirmed by year or director, so a remake with the same name won’t set it off."],
   ["What does following a director do?", "Every screening of every film they directed — including ones you didn’t know about — shows up in Upcoming and in your emails. Follow a single film instead if you only care about that one."],
   ["How does Letterboxd work here?", "Import your Letterboxd export (Watchlist → Letterboxd). Films you rated 4.5★ or higher are followed automatically, “For you” suggests other films you’d likely want, and anything you’ve logged is marked “Seen.” Each morning Filament also reads your public Letterboxd diary, so new favorites are picked up on their own."],
   ["Why isn’t a favorite showing up?", "If you watched it in the last 4 months, Filament assumes you don’t need a reminder yet. Change or turn off that rule in Settings → Letterboxd. It may also simply not be scheduled in New York right now — try “Is it playing?” at the top of Upcoming."],
-  ["What gets stored about me?", "Only what Filament needs: the directors and films you follow, your settings, and from Letterboxd just titles, years, ratings, watch dates and your watchlist — never your email, profile or reviews. It all lives in your own private GitHub project. Your access key stays on your devices."],
+  ["What gets stored about me?", "Only what Filament needs: your name and email (for alerts), the directors and films you follow, your settings, and from Letterboxd just titles, years, ratings, watch dates and your watchlist — never your profile or reviews. It’s kept private, never shared or sold, and there’s no password to leak."],
+  ["How do I use it on another phone or computer?", "Open Filament there and choose “Email me a sign-in link” — or in Settings, tap “Share link” on a device you already use. No passwords."],
   ["Emails or notifications?", "Both, if you like. Emails group everything new from a check into one message, plus a Sunday “Playing this week” digest. Phone notifications (Settings → Phone notifications) put the same news on your lock screen."],
   ["What will I be told about?", "New screenings of what you follow, changes (moved dates, new or changed showtimes), cancellations, and a “last chance” reminder when a film’s run is down to its final screening. Each piece of news only once. Filters in Settings can limit emails to, say, 35mm prints or certain theaters."],
   ["Can I buy tickets here?", "No — Filament points you to each theater’s own ticket page (“Tickets”), where you buy directly from the venue."],
   ["Does it cost anything?", "No. It runs within free allowances from GitHub (scheduling and hosting) and Resend (email)."],
   ["The app looks out of date.", "Pull down on Upcoming to refresh. If a new version doesn’t appear, close Filament fully and reopen it — updates arrive within about ten minutes."],
   ["I didn’t get an email.", "Check spam, then Settings → Send test email. If a check fails twice in a row, Filament emails you about that too."],
-  ["How do I put it on my iPhone?", "Open it in Safari, tap Share → Add to Home Screen. It then opens full-screen like an app, works offline, and can send notifications."],
+  ["How do I put it on my iPhone?", "Open it in Safari, tap Share (on newer iPhones it’s in the ••• menu), then Add to Home Screen. It then opens full-screen like an app, works offline, and can send notifications."],
+  ["How do I report a bug or suggest something?", "Settings → Send feedback. It goes straight to the person who runs Filament."],
   ["Anything else?", "A few things are hidden. Try the lamp."],
 ];
 function viewHelp() {
@@ -721,42 +731,87 @@ function viewHelp() {
     ${wireEl()}
     <div class="group-label">Questions</div>
     <div class="group faq">${FAQ.map(([q, a]) => `<details class="faq__item"><summary>${h(q)}</summary><p>${h(a)}</p></details>`).join("")}</div>
+    ${isFriend() ? feedbackRow() : ""}
     <div class="group-label">About</div>
     <div class="group"><div class="row"><div class="row__main"><div class="row__title">Where the listings come from</div>
       <div class="row__sub">Filament reads the public New York listings published by <a href="https://www.screenslate.com" target="_blank" rel="noopener">Screen Slate</a>, the independent daily guide to repertory, arthouse and experimental film. Listings data © Screen Slate. Director and film details from Wikidata; portraits from Wikimedia Commons.</div></div></div></div>
   </div>`;
 }
 
+const featuresList = () => {
+  const feat = (n, ti, d) => `<li class="feature"><span class="feature__n">${n}</span><div><div class="feature__t">${ti}</div><div class="feature__d">${d}</div></div></li>`;
+  return `<ol class="features">
+      ${feat("01", "Follow anyone", "A whole director — every film by David Lynch — or a single title like <i>Eyes Wide Shut</i>.")}
+      ${feat("02", "See what’s playing", "Every upcoming NYC screening of what you follow, with venue, date, showtimes and format.")}
+      ${feat("03", "Get told first", "One email when something new is scheduled, moved or cancelled. Never the same news twice.")}
+    </ol>`;
+};
+
+// What anyone sees without a link: Filament is invite-only. The owner's GitHub sign-in is tucked away.
 function welcome(errMsg) {
   const c = loadConnection() || {};
-  const feat = (n, t, d) => `<li class="feature"><span class="feature__n">${n}</span><div><div class="feature__t">${t}</div><div class="feature__d">${d}</div></div></li>`;
+  const si = state.signin || {};
+  const ownerOpen = !!(errMsg || state.busy || c.owner || new URLSearchParams(location.search).has("owner"));
   return `<div class="welcome"><div class="welcome__card">
     ${tubesArt()}
     <div class="eyebrow">Filament · New York</div>
     <h1>Is your favorite film playing in New York?</h1>
-    <p class="welcome__lede">Follow the directors and films you love. Filament reads New York’s repertory and arthouse listings every morning, and emails you the moment one of yours is scheduled.</p>
-    <ol class="features">
-      ${feat("01", "Follow anyone", "A whole director — every film by David Lynch — or a single title like <i>Eyes Wide Shut</i>.")}
-      ${feat("02", "See what’s playing", "Every upcoming NYC screening of what you follow, with venue, date, showtimes and format.")}
-      ${feat("03", "Get told first", "One email when something new is scheduled, moved or cancelled. Never the same news twice.")}
-    </ol>
+    <p class="welcome__lede">Follow the directors and films you love. Filament reads New York’s repertory and arthouse listings every morning, and tells you the moment one of yours is scheduled.</p>
+    ${featuresList()}
     ${wireEl()}
-    <h2 class="welcome__signin">Open your Filament</h2>
+    <h2 class="welcome__signin">Filament is invite-only</h2>
+    <p class="welcome__note">Open the invite link you were sent to get started.</p>
+    <div class="welcome__box">
+      <div class="welcome__boxtitle">Already have a Filament?</div>
+      ${si.sent ? `<p class="welcome__sent" role="status">${h(si.sent)} Open the email on this device and tap <b>Open my Filament</b>.</p>`
+        : `<form id="signin" class="inline-form">
+        <label class="field"><span>Your email</span><input name="email" type="email" inputmode="email" autocomplete="email" autocapitalize="off" placeholder="you@example.com" required></label>
+        ${si.error ? `<p class="error-text">${h(si.error)}</p>` : ""}
+        <button class="btn" style="width:100%;height:46px" ${si.busy ? "disabled" : ""}>${si.busy ? "Sending…" : "Email me a sign-in link"}</button>
+      </form>`}
+    </div>
+    <details class="steps-wrap faq-welcome"><summary>How Filament works</summary><div class="group faq" style="margin-top:12px">${FAQ.slice(0, 6).map(([q, a]) => `<details class="faq__item"><summary>${h(q)}</summary><p>${h(a)}</p></details>`).join("")}</div></details>
+    <details class="steps-wrap owner-signin" ${ownerOpen ? "open" : ""}><summary>Owner sign-in</summary>
     ${errMsg ? `<p class="error-text">${h(errMsg)}</p>` : ""}
-    <form id="connect">
+    <form id="connect" style="margin-top:12px">
       <label class="field"><span>GitHub username</span><input name="owner" autocomplete="username" autocapitalize="off" value="${h(c.owner || (location.hostname.endsWith(".github.io") ? location.hostname.split(".")[0] : ""))}" required></label>
       <label class="field"><span>Repository name</span><input name="repo" autocapitalize="off" value="${h(c.repo || "filament")}" required></label>
       <label class="field"><span>Access token</span><input name="token" type="password" autocomplete="off" placeholder="github_pat_…" required></label>
       <button class="btn btn--brass" style="width:100%;height:48px" ${state.busy ? "disabled" : ""}>${state.busy ? "Opening…" : "Open Filament"}</button>
     </form>
-    <details class="steps-wrap faq-welcome"><summary>How Filament works</summary><div class="group faq" style="margin-top:12px">${FAQ.slice(0, 6).map(([q, a]) => `<details class="faq__item"><summary>${h(q)}</summary><p>${h(a)}</p></details>`).join("")}</div></details>
     <details class="steps-wrap"><summary>Where do I get an access token?</summary>
     <ol class="steps">
       <li>On github.com open <b>Settings → Developer settings → Fine-grained tokens → Generate new token</b>.</li>
       <li>Repository access: <b>Only select repositories</b> → your Filament repository.</li>
       <li>Permissions: <b>Contents: Read and write</b> and <b>Actions: Read and write</b>.</li>
       <li>Copy the token and paste it above. It stays on this device only.</li>
-    </ol></details>
+    </ol></details></details>
+  </div></div>`;
+}
+
+// Opening a join link: a one-step sign-up — name and email, no password.
+function joinScreen() {
+  const j = state.join;
+  const from = j.info?.from;
+  return `<div class="welcome"><div class="welcome__card">
+    ${tubesArt()}
+    <div class="eyebrow">Filament · New York</div>
+    <h1>Is your favorite film playing in New York?</h1>
+    <p class="welcome__lede">${from ? `${h(from)} invited you to Filament.` : "You’re invited to Filament."} Follow the directors and films you love, and get told the moment one is scheduled in New York.</p>
+    ${featuresList()}
+    ${wireEl()}
+    ${j.sent ? `<h2 class="welcome__signin">Check your email</h2><p class="welcome__sent" role="status">${h(j.sent)} Open it on this device and tap <b>Open my Filament</b>.</p>`
+      : j.dead ? `<h2 class="welcome__signin">This link isn’t active</h2><p class="welcome__note">${h(j.dead)}</p>`
+      : `<h2 class="welcome__signin">Join Filament</h2>
+    ${j.info?.full ? `<p class="error-text">Filament is full right now — ask ${h(from || "the person who sent you the link")} to make room.</p>` : ""}
+    <form id="join">
+      <label class="field"><span>Your first name</span><input name="name" autocomplete="given-name" autocapitalize="words" maxlength="40" required value="${h(j.name || "")}"></label>
+      <label class="field"><span>Email</span><input name="email" type="email" inputmode="email" autocomplete="email" autocapitalize="off" placeholder="you@example.com" required value="${h(j.email || "")}">
+        <small>Where your alerts go. Never shared.</small></label>
+      ${j.error ? `<p class="error-text">${h(j.error)}</p>` : ""}
+      <button class="btn btn--brass" style="width:100%;height:50px;font-size:17px" ${j.busy || j.info?.full ? "disabled" : ""}>${j.busy ? "Joining…" : "Join Filament"}</button>
+      <p class="welcome__fine">Free · No password — this device stays signed in · Turn emails off any time</p>
+    </form>`}
   </div></div>`;
 }
 
@@ -765,10 +820,11 @@ const navOf = (v) => (v === "help" ? "settings" : v);
 const NAV = [["upcoming", "Upcoming", ICON.upcoming], ["watch", "Watchlist", ICON.watch], ["archive", "Archive", ICON.archive], ["settings", "Settings", ICON.settings]];
 
 function render() {
-  if (!state.src) { app.innerHTML = welcome(state.error); bindWelcome(); return; }
+  if (!state.src) { app.innerHTML = state.join ? joinScreen() : welcome(state.error); bindWelcome(); return; }
   const st = D().status || {};
   const lampState = state.running ? "busy" : st.last_run ? (st.last_run.ok ? "on" : "error") : "off";
-  const counts = { upcoming: state.data ? upcomingItems().filter((d) => d.status === "active").length : "", watch: (settings().directors.length + settings().films.length) || "" };
+  const counts = { upcoming: state.data ? upcomingItems().filter((d) => d.status === "active").length : "", watch: (settings().directors.length + settings().films.length) || "",
+    settings: (D().feedback?.items || []).filter((x) => x.status !== "done").length || "" };
   const view = state.loading && !state.data ? `<div class="page"><div class="skeleton" style="height:150px"></div><div class="skeleton"></div><div class="skeleton"></div></div>`
     : { upcoming: viewUpcoming, watch: viewWatchlist, archive: viewArchive, settings: viewSettings, help: viewHelp }[state.view]();
   const active = document.activeElement?.id;
@@ -1051,31 +1107,169 @@ const reopenSheet = () => { if (sheetRoot.dataset.key) openSheet(sheetRoot.datas
 /* ------------------------------------------------------------- friends */
 const isFriend = () => !!state.src?.friend;
 const inviteLink = (key, api) => `${location.origin}${location.pathname}#invite=${encodeURIComponent(key)}&api=${encodeURIComponent(api)}`;
-const BLANK_PROFILE = (name, email) => ({
-  version: 1, name, directors: [], films: [],
-  notifications: { email_enabled: true, recipient: email || "", notify_new: true, notify_changes: true, notify_cancellations: true,
-    notify_first_run: true, last_chance_days: 2, weekly_digest: true, filters: { formats: [], venues: [], days: "any" } },
-  schedule: { times: ["09:00"], timezone: "America/New_York" },
-  letterboxd: { enabled: false, username: "", min_rating: 4.5, include_watchlist: false, sync_rss: true, recent_months: 4 },
-});
 async function sha256hex(s) {
   const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
   return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
+const JOIN_CAP = 25;
+function joinLink(j) {
+  const api = settings().friends_api;
+  return `${settings().app_url || location.origin + location.pathname}#join=${encodeURIComponent(j.key)}${api && api !== FRIENDS_API ? `&api=${encodeURIComponent(api)}` : ""}`;
+}
 function friendsBlock() {
   const api = settings().friends_api;
-  const list = D().friends?.friends || [];
+  const idx = D().friends || {};
+  const list = idx.friends || [];
+  const j = idx.join;
   if (!api) {
     return `<div class="group-label">Friends</div><div class="group"><div class="row"><div class="row__main"><div class="row__title">Invite friends</div>
       <div class="row__sub">Friends get their own blank Filament — their own directors, films, Letterboxd and alerts. Ask Claude to finish setting up the free friends service to turn this on.</div></div></div></div>`;
   }
+  const active = list.filter((f) => f.enabled !== false).length;
+  const joinRow = !j ? `<div class="row"><div class="row__main"><div class="row__title">Invite friends</div>
+      <div class="row__sub">Make one link you can text to anyone. They sign up with just their name and email — no accounts, no passwords — and start with a blank Filament of their own.</div></div>
+      <button class="btn btn--sm btn--brass" data-action="join-create">Create link</button></div>`
+    : `<div class="row join-row"><div class="row__main"><div class="row__title">Join link ${j.enabled === false ? `<span class="tag tag--gone">Off</span>` : ""}</div>
+      <div class="row__sub">${j.enabled === false ? "Turned off — nobody new can join. Everyone who joined keeps their Filament." : `Anyone with this link can join · ${active} of ${j.cap || JOIN_CAP} places used`}</div></div>
+      <div class="actions">${j.enabled === false ? `<button class="btn btn--sm" data-action="join-on">Turn on</button>`
+        : `<button class="btn btn--sm btn--brass" data-action="join-share">Share</button><button class="btn btn--sm" data-action="join-copy">Copy</button>`}</div></div>
+      ${j.enabled === false ? "" : `<div class="row"><div class="row__main"><div class="row__sub">Shared it somewhere you didn’t mean to? Replace it — the old link stops working, and nobody who joined is affected.</div></div>
+        <div class="actions"><button class="btn btn--sm btn--ghost" data-action="join-replace">Replace</button><button class="btn btn--sm btn--ghost" data-action="join-off">Turn off</button></div></div>`}`;
   return `<div class="group-label">Friends</div><div class="group">
+    ${joinRow}
     ${list.map((f) => `<div class="row" style="${f.enabled === false ? "opacity:.55" : ""}">${avatar(f.name)}<div class="row__main"><div class="row__title">${h(f.name)}</div>
-      <div class="row__sub">${h(f.email || "No email — app only")}${f.enabled === false ? " · turned off" : ` · invited ${h(f.created || "")}`}</div></div>
-      <div class="actions">${f.enabled === false ? `<button class="btn btn--sm" data-action="friend-on" data-id="${h(f.id)}">Turn on</button>` : `<button class="btn btn--sm" data-action="friend-link" data-id="${h(f.id)}">New link</button><button class="btn btn--sm btn--ghost" data-action="friend-off" data-id="${h(f.id)}">Turn off</button>`}</div></div>`).join("")}
-    <div class="row"><div class="row__main"><div class="row__title">Invite a friend</div><div class="row__sub">They start blank and choose their own. Their emails need your domain set up; until then they get the app and phone notifications.</div></div>
-      <button class="btn btn--sm btn--brass" data-action="friend-new">Invite</button></div></div>`;
+      <div class="row__sub">${h(f.email || "No email — app only")}${f.enabled === false ? " · turned off" : ` · joined ${h(f.created || "")}`}</div></div>
+      <div class="actions">${f.enabled === false ? `<button class="btn btn--sm" data-action="friend-on" data-id="${h(f.id)}">Turn on</button>` : `<button class="btn btn--sm btn--ghost" data-action="friend-off" data-id="${h(f.id)}">Turn off</button>`}</div></div>`).join("")}
+  </div>
+  <p class="group-foot">Friends never see what you follow, and never deal with GitHub. Turning someone off stops their alerts and signs them out everywhere.</p>`;
 }
+async function joinAction(a) {
+  const key = () => b64u(crypto.getRandomValues(new Uint8Array(12)));
+  if (a === "join-share" || a === "join-copy") {
+    const link = joinLink(D().friends.join);
+    if (a === "join-share" && navigator.share) { try { await navigator.share({ title: "Join me on Filament", text: "Find out when the films you love are playing in New York:", url: link }); } catch { /* cancelled */ } return; }
+    try { await navigator.clipboard.writeText(link); toast("Join link copied"); } catch { showLinkSheet("Join link", "Copy this link and send it to friends.", link); }
+    return;
+  }
+  if (a === "join-replace" && !confirm("Replace the join link? The old link stops working. Everyone who already joined keeps their Filament.")) return;
+  if (a === "join-off" && !confirm("Turn off the join link? Nobody new can join until you turn it back on. Everyone who joined keeps their Filament.")) return;
+  try {
+    await saveFriendsIndex((idx) => {
+      idx.friends = idx.friends || [];
+      if (a === "join-create" || a === "join-replace") idx.join = { ...(idx.join || {}), key: key(), enabled: true, cap: idx.join?.cap || JOIN_CAP, created: todayISO() };
+      if (a === "join-off") idx.join.enabled = false;
+      if (a === "join-on") idx.join.enabled = true;
+    });
+    toast({ "join-create": "Join link ready — tap Share to send it", "join-replace": "New join link ready — the old one no longer works", "join-off": "Join link turned off", "join-on": "Join link is back on" }[a]);
+  } catch (e) { toast(`Couldn’t save: ${e.message}`); }
+}
+function showLinkSheet(title, sub, link) {
+  sheetRoot.innerHTML = `<div class="scrim" data-action="close-sheet"></div>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="ls-title"><div class="sheet__grab"></div>
+      <div class="sheet__hero"><button class="icon-btn sheet__close" data-action="close-sheet" aria-label="Close">${ICON.close}</button>
+        <div class="eyebrow">Friends</div><h2 class="sheet__title" id="ls-title">${h(title)}</h2><p class="page-sub">${h(sub)}</p></div>
+      <div class="sheet__section"><div class="keybox"><code id="invite-link">${h(link)}</code></div></div></div>`;
+  dragToDismiss(sheetRoot.querySelector(".sheet"));
+}
+
+/* ------------------------------------------------------------ feedback */
+const FB_KINDS = [["bug", "Bug"], ["idea", "Idea"], ["question", "Question"], ["other", "Other"]];
+function feedbackRow() {
+  const who = state.src?.owner || "the person who runs Filament";
+  return `<div class="group-label">Feedback</div><div class="group"><div class="row"><div class="row__main"><div class="row__title">Send feedback</div>
+    <div class="row__sub">Found a bug, want a feature, or have a question? It goes straight to ${h(who)}.</div></div>
+    <button class="btn btn--sm btn--brass" data-action="fb-open">Write</button></div></div>`;
+}
+function openFeedback() {
+  const who = state.src?.owner || "the person who runs Filament";
+  sheetRoot.innerHTML = `<div class="scrim" data-action="close-sheet"></div>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="fb-title"><div class="sheet__grab"></div>
+      <div class="sheet__hero"><button class="icon-btn sheet__close" data-action="close-sheet" aria-label="Close">${ICON.close}</button>
+        <div class="eyebrow">Feedback</div><h2 class="sheet__title" id="fb-title">Tell ${h(who.split(" ")[0])}</h2>
+        <p class="page-sub">Bugs, ideas, questions — anything. Replies come to your email.</p></div>
+      <div class="sheet__section"><form id="fb-form">
+        <div class="seg fb-kinds" role="radiogroup" aria-label="Kind">${FB_KINDS.map(([k, l], i) => `<button type="button" data-action="fb-kind" data-v="${k}" role="radio" aria-pressed="${i === 0}" aria-checked="${i === 0}">${l}</button>`).join("")}</div>
+        <textarea id="fb-text" rows="6" maxlength="4000" placeholder="What happened, or what would you like?" aria-label="Your message"></textarea>
+        <button class="btn btn--brass" style="width:100%;height:48px;margin-top:12px" id="fb-send">Send</button>
+      </form></div></div>`;
+  dragToDismiss(sheetRoot.querySelector(".sheet"));
+  setTimeout(() => document.getElementById("fb-text")?.focus(), 250);
+  document.getElementById("fb-form").onsubmit = async (ev) => {
+    ev.preventDefault();
+    const text = document.getElementById("fb-text").value.trim();
+    if (text.length < 2) { toast("Write a little more first"); return; }
+    const kind = sheetRoot.querySelector(".fb-kinds [aria-pressed=true]")?.dataset.v || "other";
+    const btn = document.getElementById("fb-send");
+    btn.disabled = true; btn.textContent = "Sending…";
+    const ua = navigator.userAgent;
+    const device = /iPhone/.test(ua) ? "iPhone" : /iPad/.test(ua) ? "iPad" : /Android/.test(ua) ? "Android" : /Mac/.test(ua) ? "Mac" : /Windows/.test(ua) ? "Windows" : "Other";
+    try {
+      await state.src.feedback(kind, text, { page: state.beforeHelp || state.view, device, app: isStandalone() ? "home screen" : "browser",
+        version: (document.querySelector("script[src*='app.js']")?.src.split("v=")[1] || "") });
+      closeSheet();
+      toast("Sent — thank you!");
+    } catch (e) { btn.disabled = false; btn.textContent = "Send"; toast(e.message); }
+  };
+}
+function feedbackInbox() {
+  const items = (D().feedback?.items || []).slice().reverse();
+  if (!items.length) return "";
+  const open = items.filter((x) => x.status !== "done"), done = items.filter((x) => x.status === "done");
+  const kind = { bug: "Bug", idea: "Idea", question: "Question", other: "Feedback" };
+  const row = (x) => `<div class="row fb-item"><div class="row__main"><div class="row__title">${h(x.from_name)} <span class="tag">${kind[x.kind] || "Feedback"}</span></div>
+      <div class="fb-item__text">${h(x.text)}</div>
+      <div class="row__sub">${h(fmtWhen(x.at))}${x.context?.device ? ` · ${h(x.context.device)}` : ""}${x.context?.page ? ` · ${h(x.context.page)}` : ""}</div></div>
+      <div class="actions">${x.email ? `<a class="btn btn--sm" href="mailto:${h(x.email)}?subject=${encodeURIComponent("Re: your Filament feedback")}">Reply</a>` : ""}
+        ${x.status === "done" ? "" : `<button class="btn btn--sm btn--ghost" data-action="fb-done" data-id="${h(x.id)}">Done</button>`}</div></div>`;
+  return `<div class="group-label">Feedback${open.length ? ` · ${open.length} new` : ""}</div>
+    <div class="group">${open.length ? open.map(row).join("") : `<div class="row"><div class="row__main row__sub">You’re all caught up.</div></div>`}
+    ${done.length ? `<details class="fb-done"><summary>${plural(done.length, "finished item")}</summary>${done.slice(0, 30).map(row).join("")}</details>` : ""}</div>
+    <p class="group-foot">Friends send these from their Settings. Each one is also emailed to you.</p>`;
+}
+async function feedbackDone(id) {
+  try {
+    const doc = (await state.src.readFile("feedback.json")) || { items: [] };
+    const x = doc.items.find((y) => y.id === id);
+    if (x) x.status = "done";
+    await state.src.writeFile("feedback.json", doc, "Feedback: mark done");
+    state.data = { ...state.data, feedback: doc };
+    render();
+  } catch (e) { toast(`Couldn’t save: ${e.message}`); }
+}
+
+/* ---------------------------------------------- Add to Home Screen nudge */
+let installPrompt = null;
+addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); installPrompt = e; if (state.src) render(); });
+const a2hsPlatform = () => {
+  if (isStandalone()) return null;
+  const ua = navigator.userAgent;
+  if (/iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) return "ios";
+  if (/Android/.test(ua)) return "android";
+  return null;
+};
+const a2hsDismissed = () => { try { return localStorage.getItem("filament.a2hs") === "no"; } catch { return false; } };
+const SHARE_GLYPH = `<svg viewBox="0 0 20 24" width="15" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-label="Share"><path d="M10 2v13M5.5 6.5 10 2l4.5 4.5"/><path d="M6.5 10H4a1.5 1.5 0 0 0-1.5 1.5v9A1.5 1.5 0 0 0 4 22h12a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 16 10h-2.5"/></svg>`;
+function a2hsSteps(p) {
+  if (p === "android") return installPrompt ? `<button class="btn btn--sm btn--brass" data-action="a2hs-install">Install Filament</button>`
+    : `<div class="a2hs__steps">Tap <b>⋮</b> in Chrome, then <b>Add to Home screen</b></div>`;
+  return `<div class="a2hs__steps">In Safari, tap <span class="a2hs__glyph">${SHARE_GLYPH}</span> <b>Share</b> <span class="a2hs__or">(or <b>•••</b> then Share)</span>, then <b>Add to Home Screen</b></div>`;
+}
+function homeScreenTip() {
+  const p = a2hsPlatform();
+  if (!p || a2hsDismissed()) return "";
+  return `<aside class="a2hs" aria-label="Add Filament to your Home Screen">
+    <img class="a2hs__icon" src="icon-180.png" alt="" width="46" height="46">
+    <div class="a2hs__body"><div class="a2hs__t">Put Filament on your Home Screen</div>
+      <div class="a2hs__d">It opens like an app — and can send you a notification the moment something you follow is scheduled.</div>
+      ${a2hsSteps(p)}</div>
+    <button class="icon-btn a2hs__x" data-action="a2hs-dismiss" aria-label="Not now">${ICON.close}</button></aside>`;
+}
+function homeScreenRow() {
+  const p = a2hsPlatform();
+  if (!p) return "";
+  return `<div class="row"><div class="row__main"><div class="row__title">Add to Home Screen</div>${a2hsSteps(p).replace("a2hs__steps", "row__sub a2hs__steps")}</div></div>`;
+}
+
 async function saveFriendsIndex(fn) {
   const idx = (await state.src.readFile("friends/index.json")) || { friends: [] };
   fn(idx);
@@ -1084,39 +1278,6 @@ async function saveFriendsIndex(fn) {
   render();
   return idx;
 }
-function showInvite(name, link) {
-  sheetRoot.innerHTML = `<div class="scrim" data-action="close-sheet"></div>
-    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="inv-title"><div class="sheet__grab"></div>
-      <div class="sheet__hero"><button class="icon-btn sheet__close" data-action="close-sheet" aria-label="Close">${ICON.close}</button>
-        <div class="eyebrow">Friends</div><h2 class="sheet__title" id="inv-title">Invite ${h(name)}</h2>
-        <p class="page-sub">Send them this private link. It opens their own Filament; anyone with it can use it, so share it only with them. It’s shown once — you can always make a new one.</p></div>
-      <div class="sheet__section"><div class="keybox"><code id="invite-link">${h(link)}</code></div>
-        <div class="actions" style="margin-top:12px"><button class="btn btn--brass" data-action="invite-share">Share link</button><button class="btn" data-action="invite-copy">Copy</button></div></div></div>`;
-  dragToDismiss(sheetRoot.querySelector(".sheet"));
-}
-async function inviteFriend() {
-  const name = (prompt("Friend’s name") || "").trim();
-  if (!name) return;
-  const email = (prompt(`${name}’s email (optional — leave empty for app only)`) || "").trim();
-  if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { toast("That doesn’t look like an email address"); return; }
-  const key = b64u(crypto.getRandomValues(new Uint8Array(24)));
-  const id = `${name.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "friend"}-${b64u(crypto.getRandomValues(new Uint8Array(3))).toLowerCase().replace(/[^a-z0-9]/g, "")}`;
-  try {
-    await state.src.writeFile(`friends/${id}/settings.json`, BLANK_PROFILE(name, email), `Invite ${name}`);
-    const hash = await sha256hex(key);              // only the fingerprint of the key is stored
-    await saveFriendsIndex((idx) => { idx.friends = [...(idx.friends || []), { id, name, email, key_hash: hash, created: todayISO(), enabled: true }]; });
-    showInvite(name, inviteLink(key, settings().friends_api));
-  } catch (e) { toast(`Couldn’t invite: ${e.message}`); }
-}
-async function newFriendLink(id) {
-  const f = (D().friends?.friends || []).find((x) => x.id === id);
-  if (!f || !confirm(`Make a new link for ${f.name}? Their old link stops working.`)) return;
-  const key = b64u(crypto.getRandomValues(new Uint8Array(24)));
-  const hash = await sha256hex(key);
-  await saveFriendsIndex((idx) => { const x = idx.friends.find((y) => y.id === id); if (x) { x.key_hash = hash; x.enabled = true; } });
-  showInvite(f.name, inviteLink(key, settings().friends_api));
-}
-
 /* ------------------------------------------------- phone notifications */
 const b64u = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 const b64uBytes = (s) => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((s.length + 3) % 4)), (c) => c.charCodeAt(0));
@@ -1477,6 +1638,7 @@ async function refresh(quiet) {
   state.loading = true;
   if (!quiet) render();
   try {
+    if (state.src.friend && !state.src.name) await state.src.verify();
     state.data = await loadAll(state.src);
     state.error = null;
     state.running = !!(await state.src.activeRun().catch(() => null));
@@ -1569,6 +1731,7 @@ async function onAction(el, ev) {
   if (a === "open") return openSheet(el.dataset.key);
   if (a === "close-sheet") return closeSheet();
   if (a === "reload") return refresh();
+  if (a === "lb-start") { state.prevView = state.view; state.view = "watch"; state.watchTab = "letterboxd"; state.enter = true; return transition(() => { render(); window.scrollTo({ top: 0 }); }); }
   if (a === "tab") { state.watchTab = el.dataset.tab; state.query = ""; state.results = null; state.enter = true; return transition(render); }
   if (a === "afilter") { state.archiveFilter = el.dataset.f; return render(); }
   if (a === "app-icon") { setAppIcon(el.dataset.v); return render(); }
@@ -1587,8 +1750,18 @@ async function onAction(el, ev) {
     return;
   }
   if (a === "help-done") { const back = state.beforeHelp || "settings"; state.prevView = "help"; state.view = back; state.enter = true; return transition(() => { render(); window.scrollTo({ top: 0 }); }); }
-  if (a === "friend-new") return inviteFriend();
-  if (a === "friend-link") return newFriendLink(el.dataset.id);
+  if (a.startsWith("join-")) return joinAction(a);
+  if (a === "fb-open") return openFeedback();
+  if (a === "fb-kind") { el.parentElement.querySelectorAll("button").forEach((b) => { const on = b === el; b.setAttribute("aria-pressed", on); b.setAttribute("aria-checked", on); }); return; }
+  if (a === "fb-done") return feedbackDone(el.dataset.id);
+  if (a === "a2hs-dismiss") {
+    try { localStorage.setItem("filament.a2hs", "no"); } catch { /* ignore */ }
+    const card = el.closest(".a2hs");
+    if (card && !reducedMotion()) { card.classList.add("a2hs--out"); setTimeout(render, 260); } else render();
+    toast("Got it — it’s in Settings if you change your mind");
+    return;
+  }
+  if (a === "a2hs-install") { if (installPrompt) { installPrompt.prompt(); installPrompt.userChoice.finally(() => { installPrompt = null; render(); }); } return; }
   if (a === "friend-off" || a === "friend-on") {
     const on = a === "friend-on";
     const f = (D().friends?.friends || []).find((x) => x.id === el.dataset.id);
@@ -1658,7 +1831,7 @@ async function onAction(el, ev) {
   if (a === "days") return saveFilters((f) => { f.days = el.dataset.v; }, "Saved");
   if (a === "venues") return openVenueSheet();
   if (a === "disconnect") {
-    if (!confirm("Disconnect this device? Your watchlist and history stay safe on GitHub.")) return;
+    if (!confirm(isFriend() ? "Sign out on this device? Everything you follow stays saved — get back in any time with a sign-in link sent to your email." : "Disconnect this device? Your watchlist and history stay safe on GitHub.")) return;
     forgetConnection(); state.src = null; state.data = null; return render();
   }
   if (a === "remove") {
@@ -1760,6 +1933,36 @@ document.addEventListener("keydown", (ev) => {
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && state.src) refresh(true); });
 
 function bindWelcome() {
+  const jf = document.getElementById("join");
+  if (jf) jf.onsubmit = async (ev) => {
+    ev.preventDefault();
+    const f = new FormData(jf);
+    const j = state.join;
+    Object.assign(j, { name: String(f.get("name")).trim(), email: String(f.get("email")).trim(), busy: true, error: null });
+    render();
+    try {
+      const r = await joinFilament(j.api, j.key, j.name, j.email);
+      if (r.exists) { Object.assign(j, { busy: false, sent: r.message }); render(); return; }
+      const conn = { mode: "friend", key: r.key, api: j.api };
+      saveConnection(conn);
+      history.replaceState(null, "", location.pathname + location.search);
+      state.join = null;
+      state.src = makeSource(conn);
+      state.view = "upcoming";
+      await refresh();
+      toast(`Welcome, ${r.name.split(" ")[0]} — start by following someone you love`);
+    } catch (e) { Object.assign(j, { busy: false, error: e.message }); if (e.status === 403 && /isn’t active/.test(e.message)) j.dead = e.message; render(); }
+  };
+  const sf = document.getElementById("signin");
+  if (sf) sf.onsubmit = async (ev) => {
+    ev.preventDefault();
+    const email = String(new FormData(sf).get("email")).trim();
+    state.signin = { busy: true };
+    render();
+    try { const r = await emailSignIn(FRIENDS_API, email); state.signin = { sent: r.message }; }
+    catch (e) { state.signin = { error: e.message }; }
+    render();
+  };
   const form = document.getElementById("connect");
   if (!form) return;
   form.onsubmit = async (ev) => {
@@ -1784,7 +1987,7 @@ function bindWelcome() {
 applyTheme();
 // Instant launch & offline: cache the app itself (never your data).
 if ("serviceWorker" in navigator && !isLocal()) {
-  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261109212316").catch(() => {}));
+  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261109221817").catch(() => {}));
 }
 // Friend invite links: #invite=<key>&api=<friends service> (the fragment never reaches any server).
 (function acceptInvite() {
@@ -1793,6 +1996,20 @@ if ("serviceWorker" in navigator && !isLocal()) {
   saveConnection({ mode: "friend", key: p.get("invite"), api: p.get("api") });
   history.replaceState(null, "", location.pathname + location.search);
 })();
+// Join links: #join=<shared key>[&api=<friends service>] → a one-step sign-up.
+(function acceptJoin() {
+  const p = new URLSearchParams(location.hash.slice(1));
+  if (!p.get("join")) return;
+  const c = loadConnection();
+  history.replaceState(null, "", location.pathname + location.search);
+  if (c) { setTimeout(() => toast(c.mode === "friend" ? "You’re already in — welcome back" : "That’s your join link — share it with friends"), 600); return; }
+  state.join = { key: p.get("join"), api: p.get("api") || FRIENDS_API };
+  joinInfo(state.join.api, state.join.key)
+    .then((info) => { if (state.join) { state.join.info = info; render(); } })
+    .catch((e) => { if (state.join && e.status === 403) { state.join.dead = e.message; render(); } });
+})();
+// A link pasted into an already-open tab only changes the #fragment: start over so it's read.
+addEventListener("hashchange", () => { if (/#(join|invite|connect)=/.test(location.hash)) location.reload(); });
 // "Sign in on another device" links carry the connection in the #fragment (never sent to any server).
 (function acceptDeviceLink() {
   const m = /#connect=([A-Za-z0-9+/=]+)/.exec(location.hash);
