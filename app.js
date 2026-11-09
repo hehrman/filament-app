@@ -1,11 +1,11 @@
-import { creditIsDirector, fold, matchFilm, matchOccurrence } from "./match.js?v=20261109211742";
+import { creditIsDirector, fold, matchFilm, matchOccurrence } from "./match.js?v=20261109212316";
 import {
   ApiError, cached, forgetConnection, isLocal, loadAll, loadConnection, makeSource, mutateSettings, saveConnection,
-} from "./data.js?v=20261109211742";
-import { followList, forYou, importExport, lookup, lovedDirectors, recentlyWatched, stars } from "./letterboxd.js?v=20261109211742";
+} from "./data.js?v=20261109212316";
+import { followList, forYou, importExport, lookup, lovedDirectors, recentlyWatched, stars } from "./letterboxd.js?v=20261109212316";
 import {
   filmographyFor, searchCatalog, searchWikidataDirectors, searchWikidataFilms, slugFromCatalog,
-} from "./search.js?v=20261109211742";
+} from "./search.js?v=20261109212316";
 
 const TZ = "America/New_York";
 const app = document.getElementById("app");
@@ -270,7 +270,7 @@ function consoleBlock() {
     <div class="console__body">
       ${lamp(lampState, true)}
       <div><p class="console__headline">${headline}</p><div class="console__meta">${meta.map((m) => `<span>${m}</span>`).join("")}</div></div>
-      <button class="btn btn--brass" data-action="check" ${state.running ? "disabled" : ""}>${state.running ? "Checking…" : "Check now"}</button>
+      ${isFriend() ? "" : `<button class="btn btn--brass" data-action="check" ${state.running ? "disabled" : ""}>${state.running ? "Checking…" : "Check now"}</button>`}
     </div>${err}
   </section>`;
 }
@@ -641,9 +641,9 @@ function viewSettings() {
         <div class="seg">${[[0, "Off"], [1, "1 day"], [2, "2 days"], [3, "3 days"], [7, "1 week"]].map(([v, l]) => `<button data-action="lc-days" data-v="${v}" aria-pressed="${lcDays(n) === v}">${l}</button>`).join("")}</div></div>
       ${lcDays(n) ? `<div class="row"><div class="row__main"><div class="row__title">Also before one-off screenings</div><div class="row__sub">A single screening can be the only chance — get a reminder for those too</div></div>${sw("last_chance_one_offs", !!n.last_chance_one_offs, "Remind before one-off screenings")}</div>` : ""}
       <div class="row"><div class="row__main"><div class="row__title">Weekly digest</div><div class="row__sub">Sundays at 9 AM: everything you follow playing that week</div></div>
-        <button class="btn btn--sm" data-action="digest-now">Send now</button>${sw("weekly_digest", n.weekly_digest !== false, "Weekly digest")}</div>
-      <div class="row"><div class="row__main"><div class="row__title">Email service</div><div class="row__sub">${prov === "resend" ? "Resend is connected" : prov === "smtp" ? "Your mail server is connected" : "Not confirmed yet — send a test to check"}</div></div>
-        <button class="btn btn--sm" data-action="test-email">Send test email</button></div>
+        ${isFriend() ? "" : `<button class="btn btn--sm" data-action="digest-now">Send now</button>`}${sw("weekly_digest", n.weekly_digest !== false, "Weekly digest")}</div>
+      ${isFriend() ? "" : `<div class="row"><div class="row__main"><div class="row__title">Email service</div><div class="row__sub">${prov === "resend" ? "Resend is connected" : prov === "smtp" ? "Your mail server is connected" : "Not confirmed yet — send a test to check"}</div></div>
+        <button class="btn btn--sm" data-action="test-email">Send test email</button></div>`}
     </div>
 
     <div class="group-label">Phone notifications</div>
@@ -685,6 +685,8 @@ function viewSettings() {
       ${isLocal() ? "" : `<div class="row"><div class="row__main"><div class="row__title">Sign in on another device</div><div class="row__sub">A private link that opens Filament already signed in. Treat it like a password.</div></div>
         <button class="btn btn--sm" data-action="device-link">Share link</button></div>`}
     </div>
+    ${isFriend() || isLocal() ? "" : friendsBlock()}
+
     <div class="group-label">About</div>
     <div class="group"><button class="row row--link" data-action="nav" data-view="help"><div class="row__main"><div class="row__title">About & Help</div><div class="row__sub">How Filament works, where listings come from, privacy, FAQ</div></div><span aria-hidden="true">›</span></button></div>
 
@@ -1046,6 +1048,75 @@ async function followFilm(f) {
 }
 const reopenSheet = () => { if (sheetRoot.dataset.key) openSheet(sheetRoot.dataset.key); };
 
+/* ------------------------------------------------------------- friends */
+const isFriend = () => !!state.src?.friend;
+const inviteLink = (key, api) => `${location.origin}${location.pathname}#invite=${encodeURIComponent(key)}&api=${encodeURIComponent(api)}`;
+const BLANK_PROFILE = (name, email) => ({
+  version: 1, name, directors: [], films: [],
+  notifications: { email_enabled: true, recipient: email || "", notify_new: true, notify_changes: true, notify_cancellations: true,
+    notify_first_run: true, last_chance_days: 2, weekly_digest: true, filters: { formats: [], venues: [], days: "any" } },
+  schedule: { times: ["09:00"], timezone: "America/New_York" },
+  letterboxd: { enabled: false, username: "", min_rating: 4.5, include_watchlist: false, sync_rss: true, recent_months: 4 },
+});
+async function sha256hex(s) {
+  const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
+  return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+function friendsBlock() {
+  const api = settings().friends_api;
+  const list = D().friends?.friends || [];
+  if (!api) {
+    return `<div class="group-label">Friends</div><div class="group"><div class="row"><div class="row__main"><div class="row__title">Invite friends</div>
+      <div class="row__sub">Friends get their own blank Filament — their own directors, films, Letterboxd and alerts. Ask Claude to finish setting up the free friends service to turn this on.</div></div></div></div>`;
+  }
+  return `<div class="group-label">Friends</div><div class="group">
+    ${list.map((f) => `<div class="row" style="${f.enabled === false ? "opacity:.55" : ""}">${avatar(f.name)}<div class="row__main"><div class="row__title">${h(f.name)}</div>
+      <div class="row__sub">${h(f.email || "No email — app only")}${f.enabled === false ? " · turned off" : ` · invited ${h(f.created || "")}`}</div></div>
+      <div class="actions">${f.enabled === false ? `<button class="btn btn--sm" data-action="friend-on" data-id="${h(f.id)}">Turn on</button>` : `<button class="btn btn--sm" data-action="friend-link" data-id="${h(f.id)}">New link</button><button class="btn btn--sm btn--ghost" data-action="friend-off" data-id="${h(f.id)}">Turn off</button>`}</div></div>`).join("")}
+    <div class="row"><div class="row__main"><div class="row__title">Invite a friend</div><div class="row__sub">They start blank and choose their own. Their emails need your domain set up; until then they get the app and phone notifications.</div></div>
+      <button class="btn btn--sm btn--brass" data-action="friend-new">Invite</button></div></div>`;
+}
+async function saveFriendsIndex(fn) {
+  const idx = (await state.src.readFile("friends/index.json")) || { friends: [] };
+  fn(idx);
+  await state.src.writeFile("friends/index.json", idx, "Update friends");
+  state.data = { ...state.data, friends: idx };
+  render();
+  return idx;
+}
+function showInvite(name, link) {
+  sheetRoot.innerHTML = `<div class="scrim" data-action="close-sheet"></div>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="inv-title"><div class="sheet__grab"></div>
+      <div class="sheet__hero"><button class="icon-btn sheet__close" data-action="close-sheet" aria-label="Close">${ICON.close}</button>
+        <div class="eyebrow">Friends</div><h2 class="sheet__title" id="inv-title">Invite ${h(name)}</h2>
+        <p class="page-sub">Send them this private link. It opens their own Filament; anyone with it can use it, so share it only with them. It’s shown once — you can always make a new one.</p></div>
+      <div class="sheet__section"><div class="keybox"><code id="invite-link">${h(link)}</code></div>
+        <div class="actions" style="margin-top:12px"><button class="btn btn--brass" data-action="invite-share">Share link</button><button class="btn" data-action="invite-copy">Copy</button></div></div></div>`;
+  dragToDismiss(sheetRoot.querySelector(".sheet"));
+}
+async function inviteFriend() {
+  const name = (prompt("Friend’s name") || "").trim();
+  if (!name) return;
+  const email = (prompt(`${name}’s email (optional — leave empty for app only)`) || "").trim();
+  if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { toast("That doesn’t look like an email address"); return; }
+  const key = b64u(crypto.getRandomValues(new Uint8Array(24)));
+  const id = `${name.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "friend"}-${b64u(crypto.getRandomValues(new Uint8Array(3))).toLowerCase().replace(/[^a-z0-9]/g, "")}`;
+  try {
+    await state.src.writeFile(`friends/${id}/settings.json`, BLANK_PROFILE(name, email), `Invite ${name}`);
+    const hash = await sha256hex(key);              // only the fingerprint of the key is stored
+    await saveFriendsIndex((idx) => { idx.friends = [...(idx.friends || []), { id, name, email, key_hash: hash, created: todayISO(), enabled: true }]; });
+    showInvite(name, inviteLink(key, settings().friends_api));
+  } catch (e) { toast(`Couldn’t invite: ${e.message}`); }
+}
+async function newFriendLink(id) {
+  const f = (D().friends?.friends || []).find((x) => x.id === id);
+  if (!f || !confirm(`Make a new link for ${f.name}? Their old link stops working.`)) return;
+  const key = b64u(crypto.getRandomValues(new Uint8Array(24)));
+  const hash = await sha256hex(key);
+  await saveFriendsIndex((idx) => { const x = idx.friends.find((y) => y.id === id); if (x) { x.key_hash = hash; x.enabled = true; } });
+  showInvite(f.name, inviteLink(key, settings().friends_api));
+}
+
 /* ------------------------------------------------- phone notifications */
 const b64u = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 const b64uBytes = (s) => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((s.length + 3) % 4)), (c) => c.charCodeAt(0));
@@ -1065,6 +1136,7 @@ async function refreshPushState() {
 function pushBlock() {
   const pub = settings().push?.vapid_public;
   const repoSecrets = (() => { const c = loadConnection(); return c ? `https://github.com/${c.owner}/${c.repo}/settings/secrets/actions` : "https://github.com"; })();
+  if (!pub && isFriend()) return `<div class="group"><div class="row"><div class="row__main"><div class="row__sub">Phone notifications aren’t available yet.</div></div></div></div>`;
   if (!pub) {
     return `<div class="group"><div class="row"><div class="row__main"><div class="row__title">Get banners on your lock screen</div>
       <div class="row__sub">One-time setup: Filament makes a key pair on this device; you paste one key into GitHub.</div></div>
@@ -1074,8 +1146,9 @@ function pushBlock() {
   if (!pushSupported()) status = "This browser can’t receive notifications.";
   else if (/iPhone|iPad/.test(navigator.userAgent) && !isStandalone()) status = "On iPhone: open Filament from your Home Screen (Share → Add to Home Screen), then turn notifications on there.";
   else if (Notification.permission === "denied") status = "Notifications are blocked for Filament — allow them in your device settings.";
-  else if (pushState.subscribed) { status = "On for this device."; btn = `<button class="btn btn--sm" data-action="push-test">Send test</button><button class="btn btn--sm btn--ghost" data-action="push-off">Turn off</button>`; }
+  else if (pushState.subscribed) { status = "On for this device."; btn = `${isFriend() ? "" : `<button class="btn btn--sm" data-action="push-test">Send test</button>`}<button class="btn btn--sm btn--ghost" data-action="push-off">Turn off</button>`; }
   else { status = "Off for this device."; btn = `<button class="btn btn--sm btn--brass" data-action="push-on">Turn on</button>`; }
+  if (isFriend()) return `<div class="group"><div class="row"><div class="row__main"><div class="row__title">This device</div><div class="row__sub">${h(status)}</div></div><div class="actions">${btn}</div></div></div>`;
   return `<div class="group"><div class="row"><div class="row__main"><div class="row__title">This device</div><div class="row__sub">${h(status)}</div></div><div class="actions">${btn}</div></div>
     <div class="row"><div class="row__main"><div class="row__sub">Notifications need the <b>VAPID_PRIVATE_KEY</b> secret in <a href="${h(repoSecrets)}" target="_blank" rel="noopener">your GitHub settings</a>. Lost it? <a href="#" data-action="push-setup">Make a new key pair</a> (devices then need turning on again).</div></div></div></div>`;
 }
@@ -1508,12 +1581,29 @@ async function onAction(el, ev) {
   if (a === "device-link") {
     const c = loadConnection();
     if (!c) return;
-    const link = `${location.origin}${location.pathname}#connect=${btoa(JSON.stringify({ o: c.owner, r: c.repo, t: c.token }))}`;
+    const link = c.mode === "friend" ? inviteLink(c.key, c.api) : `${location.origin}${location.pathname}#connect=${btoa(JSON.stringify({ o: c.owner, r: c.repo, t: c.token }))}`;
     if (navigator.share) { try { await navigator.share({ title: "Open Filament", url: link }); } catch { /* cancelled */ } }
     else { try { await navigator.clipboard.writeText(link); toast("Link copied — open it on your other device"); } catch { toast("Couldn’t copy"); } }
     return;
   }
   if (a === "help-done") { const back = state.beforeHelp || "settings"; state.prevView = "help"; state.view = back; state.enter = true; return transition(() => { render(); window.scrollTo({ top: 0 }); }); }
+  if (a === "friend-new") return inviteFriend();
+  if (a === "friend-link") return newFriendLink(el.dataset.id);
+  if (a === "friend-off" || a === "friend-on") {
+    const on = a === "friend-on";
+    const f = (D().friends?.friends || []).find((x) => x.id === el.dataset.id);
+    if (!f || (!on && !confirm(`Turn off ${f.name}’s Filament? Their link stops working and they get no more alerts. You can turn it back on.`))) return;
+    await saveFriendsIndex((idx) => { const x = idx.friends.find((y) => y.id === f.id); if (x) x.enabled = on; });
+    toast(on ? `${f.name} is back on` : `${f.name} is turned off`);
+    return;
+  }
+  if (a === "invite-copy") { try { await navigator.clipboard.writeText(document.getElementById("invite-link").textContent); toast("Invite link copied"); } catch { toast("Select the link and copy it"); } return; }
+  if (a === "invite-share") {
+    const url = document.getElementById("invite-link").textContent;
+    if (navigator.share) { try { await navigator.share({ title: "Your Filament", text: "Here’s your own Filament — follow directors and films and hear when they’re playing in New York.", url }); } catch { /* cancelled */ } }
+    else { try { await navigator.clipboard.writeText(url); toast("Invite link copied"); } catch { /* ignore */ } }
+    return;
+  }
   if (a === "push-setup") { ev.preventDefault(); return pushSetup(); }
   if (a === "pk-copy") { try { await navigator.clipboard.writeText(document.getElementById("pk").textContent); toast("Key copied"); } catch { toast("Select the key and copy it"); } return; }
   if (a === "push-on") return pushOn();
@@ -1694,8 +1784,15 @@ function bindWelcome() {
 applyTheme();
 // Instant launch & offline: cache the app itself (never your data).
 if ("serviceWorker" in navigator && !isLocal()) {
-  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261109211742").catch(() => {}));
+  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261109212316").catch(() => {}));
 }
+// Friend invite links: #invite=<key>&api=<friends service> (the fragment never reaches any server).
+(function acceptInvite() {
+  const p = new URLSearchParams(location.hash.slice(1));
+  if (!p.get("invite") || !p.get("api")) return;
+  saveConnection({ mode: "friend", key: p.get("invite"), api: p.get("api") });
+  history.replaceState(null, "", location.pathname + location.search);
+})();
 // "Sign in on another device" links carry the connection in the #fragment (never sent to any server).
 (function acceptDeviceLink() {
   const m = /#connect=([A-Za-z0-9+/=]+)/.exec(location.hash);

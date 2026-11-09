@@ -147,13 +147,40 @@ class LocalSource {
   async lastRun() { return null; }
 }
 
+/** A friend's app: talks to the friends service with their invite key — no GitHub account needed. */
+class FriendSource {
+  constructor({ api, key }) { Object.assign(this, { api: api.replace(/\/$/, ""), key }); this.label = "Your Filament"; this.friend = true; }
+  async call(path, init = {}) {
+    let res;
+    try {
+      res = await fetch(`${this.api}${path}`, { ...init, cache: "no-store",
+        headers: { "X-Filament-Key": this.key, ...(init.body ? { "Content-Type": "application/json" } : {}) } });
+    } catch (e) { throw new Error(`Can’t reach Filament right now (${e.message})`); }
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) throw new ApiError(j.message || `Filament said ${res.status}`, res.status);
+    return j;
+  }
+  async verify() { const r = await this.call("/api/whoami"); this.name = r.name; this.label = `${r.name}’s Filament`; return r; }
+  async readFile(name) { return (await this.call(`/api/file?name=${encodeURIComponent(name)}`)).content; }
+  async readSettingsWithSha() { const r = await this.call("/api/file?name=settings.json"); return { settings: r.content, sha: r.sha }; }
+  async writeSettings(settings, sha) {
+    return (await this.call("/api/file?name=settings.json", { method: "PUT", body: JSON.stringify({ content: settings, sha }) })).sha;
+  }
+  async writeFile(name, obj) { await this.call(`/api/file?name=${encodeURIComponent(name)}`, { method: "PUT", body: JSON.stringify({ content: obj }) }); }
+  async dispatch() { throw new ApiError("Checks run every morning at 9 — anything new appears then.", 403); }
+  async activeRun() { return null; }
+  async lastRun() { return null; }
+}
+
 export function makeSource(conn) {
-  return isLocal() ? new LocalSource() : new GitHubSource(conn);
+  if (isLocal()) return new LocalSource();
+  return conn?.mode === "friend" ? new FriendSource(conn) : new GitHubSource(conn);
 }
 
 export async function loadAll(src) {
   const out = {};
-  await Promise.all(FILES.map(async (f) => { out[f.replace(".json", "")] = await src.readFile(f); }));
+  await Promise.all(FILES.map(async (f) => { out[f.replace(".json", "")] = await src.readFile(f).catch((e) => { if (f === "settings.json") throw e; return null; }); }));
+  if (!src.friend && !isLocal()) out.friends = await src.readFile("friends/index.json").catch(() => null);
   safe.set(CACHE_KEY, { at: Date.now(), data: out });
   return out;
 }
