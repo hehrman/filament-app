@@ -1,4 +1,4 @@
-import { matchOccurrence } from "./match.js";
+import { creditIsDirector, fold, matchFilm, matchOccurrence } from "./match.js";
 import {
   ApiError, cached, forgetConnection, isLocal, loadAll, loadConnection, makeSource, mutateSettings, saveConnection,
 } from "./data.js";
@@ -14,7 +14,7 @@ const toastRoot = document.getElementById("toast-root");
 const state = {
   src: null, data: null, view: "upcoming", watchTab: "directors", archiveFilter: "upcoming",
   archiveQuery: "", running: false, loading: true, error: null, results: null, query: "",
-  searching: false, busy: false,
+  searching: false, busy: false, find: "",
 };
 
 /* ----------------------------------------------------------- helpers */
@@ -58,6 +58,7 @@ const ICON = {
   search: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>`,
   close: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>`,
   trash: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h14M10 7V5h4v2M7 7l1 13h8l1-13"/></svg>`,
+  calendar: `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>`,
   refresh: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/></svg>`,
 };
 const TURNBUCKLE = `<svg viewBox="0 0 46 12" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="6" cy="6" r="3"/><path d="M9 6h4"/><rect x="13" y="2.5" width="20" height="7" rx="3.5"/><path d="M17 6h12" stroke-dasharray="1.5 1.5"/><path d="M33 6h4"/><circle cx="40" cy="6" r="3"/></svg>`;
@@ -148,6 +149,9 @@ const newTimes = (d) => {
 };
 
 /* --------------------------------------------------------- components */
+const posterImg = (src, cls) => src
+  ? `<img class="${cls}" src="${h(src)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.remove()">` : "";
+
 function screeningCard(d, { muted } = {}) {
   const tag = recency(d);
   const fresh = newTimes(d);
@@ -158,11 +162,14 @@ function screeningCard(d, { muted } = {}) {
   return `<button class="card${muted || d.status === "missing" ? " card--muted" : ""}" data-action="open" data-key="${h(d.key)}">
     <span class="card__edge plywood" aria-hidden="true"></span>
     <span class="card__body">
+      ${posterImg(d.poster, "card__poster")}
+      <span class="card__content">
       ${tag || fmt.length ? `<span class="card__top">${tag ? `<span class="tag ${tag.cls}">${h(tag.text)}</span>` : ""}${fmt.map((x) => `<span class="tag tag--fmt">${h(x)}</span>`).join("")}</span>` : ""}
       ${films}
       <span class="card__where"><span class="venue">${h(d.venue)}</span>${d.series ? `<span class="series">${h(d.series)}</span>` : ""}</span>
       <span class="times">${(d.showtimes?.length ? d.showtimes : ["Time TBA"]).map((t) => `<span class="time${fresh.has(t) ? " time--new" : ""}">${h(t)}</span>`).join("")}</span>
       ${d.notes?.length ? `<span class="notes" style="display:block">✱ ${h(d.notes.join(" · "))}</span>` : ""}
+      </span>
     </span>
   </button>`;
 }
@@ -214,6 +221,81 @@ function consoleBlock() {
   </section>`;
 }
 
+/* --------------------------------------------- "Is it playing?" search */
+const isFollowingCredit = (c) => settings().directors.some((d) => creditIsDirector(c, d));
+const isFollowingFilm = (f) => settings().films.some((x) => matchFilm(f, x));
+const filmIndex = new Map();   // key -> film, for follow buttons
+
+function findGroups(q) {
+  const qq = fold(q).trim();
+  const today = todayISO();
+  const groups = new Map();
+  for (const o of Object.values(D().listings?.occurrences || {})) {
+    if (o.status !== "active" || o.date < today) continue;
+    for (const f of o.films) {
+      const hay = fold([f.title, ...(f.directors || []).map((x) => x.name)].join(" | "));
+      if (!hay.includes(qq) && !fold(o.venue).includes(qq) && !fold(o.series || "").includes(qq)) continue;
+      const k = f.slug || f.title;
+      if (!groups.has(k)) groups.set(k, { key: k, film: f, poster: o.poster, occs: new Map() });
+      const g = groups.get(k);
+      g.poster = g.poster || o.poster;
+      g.occs.set(o.key, o);
+    }
+  }
+  const rank = (g) => (fold(g.film.title).startsWith(qq) ? 0 : fold(g.film.title).includes(qq) ? 1
+    : (g.film.directors || []).some((d) => fold(d.name).includes(qq)) ? 2 : 3);
+  return [...groups.values()].map((g) => ({ ...g, occs: [...g.occs.values()].sort((a, b) => a.date.localeCompare(b.date) || toMin(a.showtimes?.[0]) - toMin(b.showtimes?.[0])) }))
+    .sort((a, b) => rank(a) - rank(b) || a.occs[0].date.localeCompare(b.occs[0].date)).slice(0, 40);
+}
+
+function followButtons(films) {
+  const out = [];
+  const seen = new Set();
+  for (const f of films) {
+    for (const c of f.directors || []) {
+      const k = c.tmdb || c.name;
+      if (seen.has(k)) continue;
+      seen.add(k);
+      out.push(isFollowingCredit(c)
+        ? `<span class="tag tag--following">Following ${h(c.name)}</span>`
+        : `<button class="btn btn--sm" data-action="follow-dir" data-name="${h(c.name)}" data-tmdb="${h(c.tmdb || "")}" data-slug="${h(c.slug || "")}">+ Follow ${h(c.name)}</button>`);
+    }
+    const fk = f.slug || f.title;
+    filmIndex.set(fk, f);
+    out.push(isFollowingFilm(f)
+      ? `<span class="tag tag--following">Following this film</span>`
+      : `<button class="btn btn--sm" data-action="follow-film" data-fk="${h(fk)}">+ Follow “${h(f.title)}”</button>`);
+  }
+  return out.join("");
+}
+
+function viewFind() {
+  const q = state.find.trim();
+  const groups = findGroups(q);
+  const list = groups.map((g) => {
+    const f = g.film;
+    const slots = g.occs.slice(0, 6).map((o) => `<button class="slot" data-action="open" data-key="${h(o.key)}">
+        <b>${h(fmtDay(o.date, { weekday: "short", month: "short", day: "numeric" }))}</b> · ${h(o.venue)} · ${h((o.showtimes || []).slice(0, 3).join(", ") || "Time TBA")}${(o.showtimes || []).length > 3 ? "…" : ""}</button>`).join("");
+    return `<article class="find">
+      ${posterImg(g.poster, "find__poster")}
+      <div class="find__main">
+        <h3 class="card__title">${h(f.title)}</h3>
+        <div class="card__meta">${h(directorsOf(f) || "Director not listed")}${f.year ? `<span class="dot">·</span>${f.year}` : ""}${f.runtime ? `<span class="dot">·</span>${f.runtime} min` : ""}</div>
+        <div class="find__slots">${slots}${g.occs.length > 6 ? `<span class="slot slot--more">+${g.occs.length - 6} more dates</span>` : ""}</div>
+        <div class="find__follow">${followButtons([f])}</div>
+      </div>
+    </article>`;
+  }).join("");
+  return `<div class="find-head"><span><b>${groups.length ? plural(groups.length, "film") : "Nothing"}</b> playing in New York matching “${h(q)}”</span>
+      <button class="btn btn--sm btn--ghost" data-action="find-clear">Clear</button></div>
+    ${groups.length ? list : `<div class="empty"><h3>Not on Screen Slate’s NYC calendar right now</h3>
+      <p>Follow it and Filament will email you the moment it’s scheduled.</p>
+      <div class="actions" style="justify-content:center;margin-top:16px">
+        <button class="btn btn--brass" data-action="follow-typed" data-kind="films">Follow “${h(q)}” as a film</button>
+        <button class="btn" data-action="follow-typed" data-kind="directors">Follow “${h(q)}” as a director</button>
+      </div></div>`}`;
+}
+
 /* ----------------------------------------------------------- views */
 function viewUpcoming() {
   const items = upcomingItems();
@@ -222,12 +304,14 @@ function viewUpcoming() {
   const following = names.length ? `Following ${names.slice(0, 3).map(h).join(", ")}${names.length > 3 ? ` and ${names.length - 3} more` : ""}` : "You aren’t following anyone yet";
   const body = items.length ? dayGroups(items) : `<div class="empty">${tubesArt(360, 150)}
       <h3>No upcoming screenings yet</h3>
-      <p>${D().status?.last_success ? "Nothing you follow is on Screen Slate’s NYC calendar right now. Filament checks twice a day and will email you the moment something appears." : "Once the first check runs, upcoming screenings of what you follow will appear here."}</p></div>`;
+      <p>${D().status?.last_success ? "Nothing you follow is on Screen Slate’s NYC calendar right now. Filament checks every morning and will email you the moment something appears." : "Once the first check runs, upcoming screenings of what you follow will appear here."}</p></div>`;
   return `<div class="page">
     <header class="page-head"><div><div class="eyebrow">Screen Slate · New York</div><h1 class="page-title">Upcoming</h1><p class="page-sub">${following}</p></div></header>
+    <div class="search search--find">${ICON.search}<input id="find" type="search" autocomplete="off" placeholder="Is it playing? Search any film, director or theater" value="${h(state.find)}" aria-label="Search everything playing in New York"></div>
+    ${state.find.trim().length >= 2 ? viewFind() : `
     ${consoleBlock()}
     ${items.length ? `${wire}<div style="height:22px"></div>` : ""}
-    ${body}
+    ${body}`}
   </div>`;
 }
 
@@ -326,6 +410,52 @@ function viewArchive() {
   </div>`;
 }
 
+function availableFormats(selected) {
+  const count = new Map();
+  for (const o of Object.values(D().listings?.occurrences || {})) for (const f of o.films) if (f.format) count.set(f.format, (count.get(f.format) || 0) + 1);
+  for (const f of selected) if (!count.has(f)) count.set(f, 0);
+  return [...count].sort((a, b) => b[1] - a[1]).slice(0, 12).map(([f]) => f);
+}
+function availableVenues(selected) {
+  const v = new Map();
+  for (const o of Object.values(D().listings?.occurrences || {})) if (o.venue_slug) v.set(o.venue_slug, o.venue);
+  for (const s of selected) if (!v.has(s)) v.set(s, s);
+  return [...v].sort((a, b) => a[1].localeCompare(b[1]));
+}
+function filtersBlock(f) {
+  const fm = f.formats || [], vs = f.venues || [], days = f.days || "any";
+  const venueNames = availableVenues(vs).filter(([s]) => vs.includes(s)).map(([, n]) => n);
+  return `<div class="group">
+    <div class="row"><div class="row__main"><div class="row__title">Formats</div><div class="row__sub">${fm.length ? `Only ${h(fm.join(", "))}` : "Any format"}</div>
+      <div class="chips">${availableFormats(fm).map((x) => `<button class="chip chip--btn${fm.includes(x) ? " chip--on" : ""}" data-action="fmt" data-v="${h(x)}" aria-pressed="${fm.includes(x)}">${h(x)}</button>`).join("")}</div></div></div>
+    <div class="row"><div class="row__main"><div class="row__title">Theaters</div><div class="row__sub">${vs.length ? `Only ${h(venueNames.slice(0, 3).join(", "))}${venueNames.length > 3 ? ` and ${venueNames.length - 3} more` : ""}` : "Any theater"}</div></div>
+      <button class="btn btn--sm" data-action="venues">Choose</button></div>
+    <div class="row"><div class="row__main"><div class="row__title">Days</div><div class="row__sub">${{ any: "Any day", weekends: "Saturdays and Sundays only", weekdays: "Monday to Friday only" }[days]}</div></div>
+      <div class="seg">${[["any", "Any"], ["weekends", "Weekends"], ["weekdays", "Weekdays"]].map(([k, l]) => `<button data-action="days" data-v="${k}" aria-pressed="${days === k}">${l}</button>`).join("")}</div></div>
+  </div>`;
+}
+function openVenueSheet() {
+  const vs = settings().notifications?.filters?.venues || [];
+  sheetRoot.innerHTML = `<div class="scrim" data-action="close-sheet"></div>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="vsheet-title">
+      <div class="sheet__grab"></div>
+      <div class="sheet__hero"><button class="icon-btn sheet__close" data-action="close-sheet" aria-label="Close">${ICON.close}</button>
+        <div class="eyebrow">Email filters</div><h2 class="sheet__title" id="vsheet-title">Theaters</h2>
+        <p class="page-sub">Only email screenings at the theaters you tick. Tick none for any theater.</p></div>
+      <div class="sheet__section"><div class="group">${availableVenues(vs).map(([slug, name]) => `
+        <label class="row" style="cursor:pointer"><div class="row__main"><div class="row__title">${h(name)}</div></div>
+          <span class="switch"><input type="checkbox" data-action="venue-toggle" value="${h(slug)}" ${vs.includes(slug) ? "checked" : ""} aria-label="${h(name)}"><span></span></span></label>`).join("")}</div>
+        <div class="actions" style="margin-top:16px"><button class="btn btn--brass" data-action="close-sheet">Done</button></div></div>
+    </div>`;
+}
+function saveFilters(fn, okText) {
+  return saveSettings((s) => {
+    s.notifications = s.notifications || {};
+    s.notifications.filters = { formats: [], venues: [], days: "any", ...(s.notifications.filters || {}) };
+    fn(s.notifications.filters);
+  }, "Update email filters", okText);
+}
+
 function viewSettings() {
   const s = settings();
   const n = s.notifications || {};
@@ -349,6 +479,10 @@ function viewSettings() {
       <div class="row"><div class="row__main"><div class="row__title">Email service</div><div class="row__sub">${prov === "resend" ? "Resend is connected" : prov === "smtp" ? "Your mail server is connected" : "Not confirmed yet — send a test to check"}</div></div>
         <button class="btn btn--sm" data-action="test-email">Send test email</button></div>
     </div>
+
+    <div class="group-label">What gets emailed</div>
+    ${filtersBlock(n.filters || {})}
+    <p class="group-foot">Filters only change which screenings are emailed — everything you follow still appears in the app. When formats are chosen, screenings that don’t list a format are skipped.</p>
 
     <div class="group-label">Schedule</div>
     <div class="group">
@@ -472,8 +606,10 @@ function openSheet(key) {
       <div class="sheet__hero">
         <button class="icon-btn sheet__close" data-action="close-sheet" aria-label="Close">${ICON.close}</button>
         <div class="eyebrow">${h(relDay(d.date) || fmtDay(d.date, { weekday: "long" }))} · ${h(d.venue)}</div>
+        <div class="sheet__head">${posterImg(d.poster, "sheet__poster")}<div>
         <h2 class="sheet__title" id="sheet-title">${h(d.films.map((f) => f.title).join(" + "))}</h2>
         <div class="card__meta">${h(d.films.map((f) => [directorsOf(f), f.year].filter(Boolean).join(", ")).join(" · "))}</div>
+        </div></div>
       </div>
       <div class="sheet__section"><dl class="facts">${facts.map(([k, v]) => `<dt>${h(k)}</dt><dd>${h(v)}</dd>`).join("")}</dl></div>
       <div class="sheet__section"><div class="actions">
@@ -481,13 +617,74 @@ function openSheet(key) {
         ${d.film_url ? `<a class="btn" href="${h(d.film_url)}" target="_blank" rel="noopener">Film page</a>` : ""}
         ${d.ticket_url ? `<a class="btn" href="${h(d.ticket_url)}" target="_blank" rel="noopener">Tickets</a>` : ""}
       </div></div>
+      <div class="sheet__section"><div class="group-label" style="margin-top:0">Add to Calendar</div><div class="actions">
+        ${(d.showtimes?.length ? d.showtimes : [null]).map((t) => `<button class="btn btn--sm" data-action="ics" data-key="${h(d.key)}" data-time="${h(t || "")}">${ICON.calendar} ${t ? h(t) : "Add (time TBA)"}</button>`).join("")}
+      </div></div>
+      <div class="sheet__section"><div class="group-label" style="margin-top:0">Follow</div><div class="actions">${followButtons(d.films)}</div></div>
       ${evs.length || d.discovered_at ? `<div class="sheet__section">${wire}<div class="group-label" style="margin-top:14px">History</div><ul class="timeline">
         ${evs.map((e) => `<li>${h((EVENT_TEXT[e.kind] || (() => e.kind))(e))}<time>${h(fmtWhen(e.at))}</time></li>`).join("")}
         ${d.first_listed ? `<li>First seen on Screen Slate<time>${h(fmtWhen(d.first_listed))}</time></li>` : ""}</ul></div>` : ""}
     </div>`;
   sheetRoot.querySelector(".sheet__close").focus();
+  sheetRoot.dataset.key = key;
 }
-const closeSheet = () => { sheetRoot.innerHTML = ""; };
+const closeSheet = () => { sheetRoot.innerHTML = ""; delete sheetRoot.dataset.key; };
+
+/* ------------------------------------------------- add to calendar (.ics) */
+function nyToUTC(dateIso, hh, mm) {
+  const [y, m, d] = dateIso.split("-").map(Number);
+  const guess = Date.UTC(y, m - 1, d, hh, mm);
+  const part = new Intl.DateTimeFormat("en-US", { timeZone: TZ, timeZoneName: "longOffset" })
+    .formatToParts(new Date(guess)).find((p) => p.type === "timeZoneName").value;   // "GMT-05:00"
+  const mt = /GMT([+-])(\d\d):(\d\d)/.exec(part);
+  const off = mt ? (mt[1] === "-" ? -1 : 1) * (Number(mt[2]) * 60 + Number(mt[3])) : 0;
+  return new Date(guess - off * 60000);
+}
+const icsStamp = (dt) => dt.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+const icsText = (s) => String(s || "").replace(/\\/g, "\\\\").replace(/([,;])/g, "\\$1").replace(/\n/g, "\\n");
+function buildICS(d, time) {
+  const m = /^(\d+):(\d+)(AM|PM)$/.exec(time || "");
+  const hh = m ? ((+m[1] % 12) + (m[3] === "PM" ? 12 : 0)) : 19, mm = m ? +m[2] : 0;
+  const start = nyToUTC(d.date, hh, mm);
+  const minutes = d.films.reduce((a, f) => a + (f.runtime || 0), 0) || 120;
+  const end = new Date(start.getTime() + minutes * 60000);
+  const desc = [d.films.map((f) => `${f.title} — ${directorsOf(f) || "director not listed"}${f.year ? ` (${f.year})` : ""}${f.format ? `, ${f.format}` : ""}`).join("\n"),
+    d.series ? `Series: ${d.series}` : "", ...(d.notes || []), d.ticket_url ? `Tickets: ${d.ticket_url}` : "", `Screen Slate: ${d.listing_url}`].filter(Boolean).join("\n");
+  return ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Filament//Screen Slate NYC//EN", "CALSCALE:GREGORIAN", "METHOD:PUBLISH",
+    "BEGIN:VEVENT", `UID:${d.key}-${(time || "tba").replace(/\W/g, "")}@filament`, `DTSTAMP:${icsStamp(new Date())}`,
+    `DTSTART:${icsStamp(start)}`, `DTEND:${icsStamp(end)}`,
+    `SUMMARY:${icsText(d.films.map((f) => f.title).join(" + "))}${m ? "" : icsText(" (time TBA)")}`,
+    `LOCATION:${icsText(d.venue)}`, `DESCRIPTION:${icsText(desc)}`, `URL:${d.ticket_url || d.listing_url}`,
+    "BEGIN:VALARM", "TRIGGER:-PT2H", "ACTION:DISPLAY", `DESCRIPTION:${icsText(d.films[0].title)} at ${icsText(d.venue)}`, "END:VALARM",
+    "END:VEVENT", "END:VCALENDAR"].join("\r\n") + "\r\n";
+}
+function downloadICS(d, time) {
+  const blob = new Blob([buildICS(d, time)], { type: "text/calendar;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `${d.films[0].title.replace(/[^\w]+/g, "-").replace(/^-|-$/g, "")}-${d.date}.ics`;
+  document.body.append(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+}
+
+/* ------------------------------------------------------- one-tap follow */
+async function followDirector(name, tmdb, slug) {
+  toast(`Adding ${name}…`);
+  let filmography = [], qid = null, aka = [], years;
+  try {
+    const hits = await searchWikidataDirectors(name);
+    const hit = hits.find((w) => tmdb && w.tmdb === tmdb) || (!tmdb ? hits[0] : null);
+    if (hit) { qid = hit.qid; aka = hit.aka; years = hit.born ? `${hit.born}–${hit.died || ""}` : undefined; filmography = await filmographyFor(hit.qid); }
+  } catch { /* Wikidata unavailable: following by Screen Slate id still works */ }
+  await addInterest({ id: uid("dir", name), name, tmdb: tmdb || null, slug: slug || slugFromCatalog(D().catalog, tmdb, name),
+    wikidata: qid, aka, years, filmography, added: todayISO(), enabled: true }, "directors");
+}
+async function followFilm(f) {
+  await addInterest({ id: uid("film", f.title), title: f.title, year: f.year || null, slug: f.slug || null,
+    directors: (f.directors || []).map((x) => x.name), aka: [], added: todayISO(), enabled: true }, "films");
+}
+const reopenSheet = () => { if (sheetRoot.dataset.key) openSheet(sheetRoot.dataset.key); };
 
 /* ----------------------------------------------------------- actions */
 async function refresh(quiet) {
@@ -565,6 +762,7 @@ async function addInterest(entry, kind) {
   if (dup) { toast(`You already follow ${label}`); return; }
   state.query = ""; state.results = null;
   await saveSettings((s) => { s[list].push(entry); }, `Follow ${label}`, `Now following ${label}`);
+  reopenSheet();
 }
 
 async function onAction(el, ev) {
@@ -586,6 +784,22 @@ async function onAction(el, ev) {
     catch (e) { toast(e.message); }
     return;
   }
+  if (a === "find-clear") { state.find = ""; return render(); }
+  if (a === "ics") { const d = findItem(el.dataset.key); if (d) { downloadICS(d, el.dataset.time); toast("Calendar event created — open it to add to Calendar"); } return; }
+  if (a === "follow-dir") return followDirector(el.dataset.name, el.dataset.tmdb ? Number(el.dataset.tmdb) : null, el.dataset.slug || null);
+  if (a === "follow-film") { const f = filmIndex.get(el.dataset.fk); if (f) await followFilm(f); return; }
+  if (a === "follow-typed") {
+    const q = state.find.trim();
+    if (el.dataset.kind === "directors") await followDirector(q, null, null);
+    else await addInterest({ id: uid("film", q), title: q, aka: [], directors: [], added: todayISO(), enabled: true }, "films");
+    return;
+  }
+  if (a === "fmt") {
+    const v = el.dataset.v;
+    return saveFilters((f) => { f.formats = f.formats.includes(v) ? f.formats.filter((x) => x !== v) : [...f.formats, v]; }, "Saved");
+  }
+  if (a === "days") return saveFilters((f) => { f.days = el.dataset.v; }, "Saved");
+  if (a === "venues") return openVenueSheet();
   if (a === "disconnect") {
     if (!confirm("Disconnect this device? Your watchlist and history stay safe on GitHub.")) return;
     forgetConnection(); state.src = null; state.data = null; return render();
@@ -658,6 +872,9 @@ document.addEventListener("change", (ev) => {
     next[i] = v;
     saveSettings((s) => { s.schedule = s.schedule || { timezone: TZ }; const t = [...(s.schedule.times || ["09:00", "18:00"])]; t[i] = v; s.schedule.times = t; },
       "Change check times", `Checks at ${next.map(fmtTime12).join(" and ")}`);
+  } else if (el.dataset.action === "venue-toggle") {
+    const v = el.value, on = el.checked;
+    saveFilters((f) => { f.venues = on ? [...new Set([...f.venues, v])] : f.venues.filter((x) => x !== v); });
   } else if (el.id === "recipient") {
     const v = el.value.trim();
     if (v && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) { toast("That doesn’t look like an email address"); return; }
@@ -667,9 +884,14 @@ document.addEventListener("change", (ev) => {
 document.addEventListener("input", (ev) => {
   if (ev.target.id === "q") runSearch(ev.target.value);
   if (ev.target.id === "aq") { state.archiveQuery = ev.target.value; render(); }
+  if (ev.target.id === "find") { state.find = ev.target.value; render(); }
 });
 document.addEventListener("keydown", (ev) => {
-  if (ev.key === "Escape") { if (sheetRoot.innerHTML) closeSheet(); else if (state.query) { state.query = ""; state.results = null; render(); } }
+  if (ev.key === "Escape") {
+    if (sheetRoot.innerHTML) closeSheet();
+    else if (state.query) { state.query = ""; state.results = null; render(); }
+    else if (state.find) { state.find = ""; render(); }
+  }
 });
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && state.src) refresh(true); });
 

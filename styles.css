@@ -416,3 +416,35 @@ details.more summary::-webkit-details-marker { display: none; }
 .steps-wrap summary { cursor: pointer; color: var(--brass-hi); font-weight: 600; font-size: 14px; list-style: none; }
 .steps-wrap summary::-webkit-details-marker { display: none; }
 @media (max-width: 600px) { .welcome h1 { font-size: 31px; } }
+
+/* posters */
+.card__body { display: flex; gap: 16px; align-items: flex-start; }
+.card__content { flex: 1; min-width: 0; display: block; }
+.card__poster { width: 64px; aspect-ratio: 2 / 3; object-fit: cover; border-radius: 6px; flex: none;
+  border: 1px solid var(--line-2); box-shadow: 0 6px 14px -8px rgba(0,0,0,.6); background: var(--surface-2); }
+@media (max-width: 860px) { .card__poster { width: 52px; } }
+.sheet__head { display: flex; gap: 18px; align-items: flex-end; }
+.sheet__poster { width: 92px; aspect-ratio: 2 / 3; object-fit: cover; border-radius: 8px; flex: none;
+  border: 1px solid var(--line-2); box-shadow: 0 14px 28px -14px rgba(0,0,0,.7); }
+
+/* "Is it playing?" */
+.search--find input { height: 54px; font-size: 16.5px; }
+.find-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; color: var(--text-2); margin: 4px 2px 16px; }
+.find-head b { color: var(--text); }
+.find { display: flex; align-items: flex-start; gap: 18px; padding: 18px; border-radius: var(--r-m); background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow); }
+.find + .find { margin-top: 12px; }
+.find__poster { width: 78px; aspect-ratio: 2 / 3; object-fit: cover; border-radius: 7px; flex: none; border: 1px solid var(--line-2); }
+.find__main { flex: 1; min-width: 0; }
+.find__slots { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.slot { border: 1px solid var(--line-2); background: var(--surface-2); border-radius: 9px; padding: 7px 10px; font-size: 13px; color: var(--text-2); text-align: left; }
+.slot b { color: var(--text); font-weight: 600; }
+.slot:hover { border-color: var(--brass); }
+.slot--more { border-style: dashed; cursor: default; }
+.find__follow { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.tag--following { color: var(--brass-hi); border-color: color-mix(in srgb, var(--brass) 45%, transparent); background: none; height: 32px; padding: 0 12px; }
+@media (max-width: 600px) { .find { padding: 14px; gap: 14px; } .find__poster { width: 58px; } }
+
+/* filter chips */
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.chip--btn { cursor: pointer; font: 600 12.5px var(--font-mono); }
+.chip--btn.chip--on { background: linear-gradient(180deg, #EED39A, #C9A15B); color: #1A140C; border-color: transparent; }
