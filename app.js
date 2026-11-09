@@ -1,12 +1,12 @@
-import { creditIsDirector, fold, matchFilm, matchOccurrence } from "./match.js?v=20261109221817";
+import { creditIsDirector, fold, matchFilm, matchOccurrence } from "./match.js?v=20261109222816";
 import {
   ApiError, FRIENDS_API, cached, emailSignIn, forgetConnection, isLocal, joinFilament, joinInfo, loadAll, loadConnection,
   makeSource, mutateSettings, saveConnection,
-} from "./data.js?v=20261109221817";
-import { followList, forYou, importExport, lookup, lovedDirectors, recentlyWatched, stars } from "./letterboxd.js?v=20261109221817";
+} from "./data.js?v=20261109222816";
+import { followList, forYou, importExport, lookup, lovedDirectors, recentlyWatched, stars } from "./letterboxd.js?v=20261109222816";
 import {
   filmographyFor, searchCatalog, searchWikidataDirectors, searchWikidataFilms, slugFromCatalog,
-} from "./search.js?v=20261109221817";
+} from "./search.js?v=20261109222816";
 
 const TZ = "America/New_York";
 const app = document.getElementById("app");
@@ -1106,7 +1106,9 @@ const reopenSheet = () => { if (sheetRoot.dataset.key) openSheet(sheetRoot.datas
 
 /* ------------------------------------------------------------- friends */
 const isFriend = () => !!state.src?.friend;
-const inviteLink = (key, api) => `${location.origin}${location.pathname}#invite=${encodeURIComponent(key)}&api=${encodeURIComponent(api)}`;
+// The app's public address (Settings → app_url), so links point at the current home even from an old one.
+const appBase = () => settings().app_url || location.origin + location.pathname;
+const inviteLink = (key, api) => `${appBase()}#invite=${encodeURIComponent(key)}&api=${encodeURIComponent(api)}`;
 async function sha256hex(s) {
   const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
   return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, "0")).join("");
@@ -1114,7 +1116,7 @@ async function sha256hex(s) {
 const JOIN_CAP = 25;
 function joinLink(j) {
   const api = settings().friends_api;
-  return `${settings().app_url || location.origin + location.pathname}#join=${encodeURIComponent(j.key)}${api && api !== FRIENDS_API ? `&api=${encodeURIComponent(api)}` : ""}`;
+  return `${appBase()}#join=${encodeURIComponent(j.key)}${api && api !== FRIENDS_API ? `&api=${encodeURIComponent(api)}` : ""}`;
 }
 function friendsBlock() {
   const api = settings().friends_api;
@@ -1744,7 +1746,7 @@ async function onAction(el, ev) {
   if (a === "device-link") {
     const c = loadConnection();
     if (!c) return;
-    const link = c.mode === "friend" ? inviteLink(c.key, c.api) : `${location.origin}${location.pathname}#connect=${btoa(JSON.stringify({ o: c.owner, r: c.repo, t: c.token }))}`;
+    const link = c.mode === "friend" ? inviteLink(c.key, c.api) : `${appBase()}#connect=${btoa(JSON.stringify({ o: c.owner, r: c.repo, t: c.token }))}`;
     if (navigator.share) { try { await navigator.share({ title: "Open Filament", url: link }); } catch { /* cancelled */ } }
     else { try { await navigator.clipboard.writeText(link); toast("Link copied — open it on your other device"); } catch { toast("Couldn’t copy"); } }
     return;
@@ -1987,7 +1989,7 @@ function bindWelcome() {
 applyTheme();
 // Instant launch & offline: cache the app itself (never your data).
 if ("serviceWorker" in navigator && !isLocal()) {
-  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261109221817").catch(() => {}));
+  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261109222816").catch(() => {}));
 }
 // Friend invite links: #invite=<key>&api=<friends service> (the fragment never reaches any server).
 (function acceptInvite() {
