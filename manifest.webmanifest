@@ -1,7 +1,7 @@
 {
   "name": "Filament",
   "short_name": "Filament",
-  "description": "A personal watch over Screen Slate's NYC screenings.",
+  "description": "Is your favorite film or director playing in New York? Get notified.",
   "start_url": "./",
   "display": "standalone",
   "background_color": "#120F0C",

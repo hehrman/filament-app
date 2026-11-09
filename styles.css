@@ -402,3 +402,17 @@ details.more summary::-webkit-details-marker { display: none; }
 @keyframes shimmer { to { background-position: -200% 0; } }
 
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+/* welcome: product story */
+.welcome h1 { font-size: 38px; }
+.welcome__lede { font-size: 17px; line-height: 1.5; }
+.features { list-style: none; margin: 4px 0 26px; padding: 0; display: grid; gap: 14px; }
+.feature { display: grid; grid-template-columns: 34px 1fr; gap: 12px; align-items: start; }
+.feature__n { font: 500 12px/1.9 var(--font-geo); letter-spacing: .14em; color: var(--brass); }
+.feature__t { font-weight: 600; }
+.feature__d { color: var(--text-2); font-size: 14px; margin-top: 2px; }
+.welcome__signin { font: 600 20px/1.2 var(--font-display); letter-spacing: -.015em; margin: 22px 0 14px; }
+.steps-wrap { margin-top: 14px; }
+.steps-wrap summary { cursor: pointer; color: var(--brass-hi); font-weight: 600; font-size: 14px; list-style: none; }
+.steps-wrap summary::-webkit-details-marker { display: none; }
+@media (max-width: 600px) { .welcome h1 { font-size: 31px; } }

@@ -352,10 +352,9 @@ function viewSettings() {
 
     <div class="group-label">Schedule</div>
     <div class="group">
-      <div class="row"><div class="row__main"><div class="row__title">Morning check</div></div><input type="time" data-action="time" data-i="0" value="${h(times[0] || "09:00")}"></div>
-      <div class="row"><div class="row__main"><div class="row__title">Evening check</div></div><input type="time" data-action="time" data-i="1" value="${h(times[1] || "18:00")}"></div>
+      <div class="row"><div class="row__main"><div class="row__title">Daily check</div><div class="row__sub">Every morning, New York time</div></div><span style="font:600 15px var(--font-mono)">${h(fmtTime12(times[0] || "09:00"))}</span></div>
     </div>
-    <p class="group-foot">New York time — daylight saving is handled automatically. Checks run on GitHub’s computers, so your Mac and iPhone can be off. A check can start up to an hour late when GitHub is busy.</p>
+    <p class="group-foot">Checks run on GitHub’s computers, so your Mac and iPhone can be off. Daylight saving is handled automatically, and a check that GitHub starts late is still caught. Tap <b>Check now</b> on the Upcoming page any time you want an extra look.</p>
 
     <div class="group-label">Recent checks</div>
     <div class="group">${runs.length ? runs.map((r) => `<div class="row"><div class="row__main"><div class="row__title">${h(fmtWhen(r.started))} <span style="color:var(--text-3);font-weight:400">· ${r.trigger === "manual" ? "Check now" : "Scheduled"}</span></div>
@@ -377,24 +376,33 @@ function viewSettings() {
 
 function welcome(errMsg) {
   const c = loadConnection() || {};
+  const feat = (n, t, d) => `<li class="feature"><span class="feature__n">${n}</span><div><div class="feature__t">${t}</div><div class="feature__d">${d}</div></div></li>`;
   return `<div class="welcome"><div class="welcome__card">
     ${tubesArt()}
-    <div class="eyebrow">Filament</div>
-    <h1>A quiet watch over Screen Slate.</h1>
-    <p>Connect this device to your Filament data on GitHub. You only do this once per device.</p>
+    <div class="eyebrow">Filament · New York</div>
+    <h1>Is your favorite film playing in New York?</h1>
+    <p class="welcome__lede">Follow the directors and films you love. Filament reads every NYC screening listed on Screen Slate each day, and emails you the moment one of yours is scheduled.</p>
+    <ol class="features">
+      ${feat("01", "Follow anyone", "A whole director — every film by David Lynch — or a single title like <i>Eyes Wide Shut</i>.")}
+      ${feat("02", "See what’s playing", "Every upcoming NYC screening of what you follow, with venue, date, showtimes and format.")}
+      ${feat("03", "Get told first", "One email when something new is scheduled, moved or cancelled. Never the same news twice.")}
+    </ol>
+    ${wire}
+    <h2 class="welcome__signin">Open your Filament</h2>
     ${errMsg ? `<p class="error-text">${h(errMsg)}</p>` : ""}
     <form id="connect">
       <label class="field"><span>GitHub username</span><input name="owner" autocomplete="username" autocapitalize="off" value="${h(c.owner || "")}" required></label>
       <label class="field"><span>Repository name</span><input name="repo" autocapitalize="off" value="${h(c.repo || "filament")}" required></label>
       <label class="field"><span>Access token</span><input name="token" type="password" autocomplete="off" placeholder="github_pat_…" required></label>
-      <button class="btn btn--brass" style="width:100%;height:48px" ${state.busy ? "disabled" : ""}>${state.busy ? "Connecting…" : "Connect"}</button>
+      <button class="btn btn--brass" style="width:100%;height:48px" ${state.busy ? "disabled" : ""}>${state.busy ? "Opening…" : "Open Filament"}</button>
     </form>
+    <details class="steps-wrap"><summary>Where do I get an access token?</summary>
     <ol class="steps">
       <li>On github.com open <b>Settings → Developer settings → Fine-grained tokens → Generate new token</b>.</li>
       <li>Repository access: <b>Only select repositories</b> → your Filament repository.</li>
       <li>Permissions: <b>Contents: Read and write</b> and <b>Actions: Read and write</b>.</li>
       <li>Copy the token and paste it above. It stays on this device only.</li>
-    </ol>
+    </ol></details>
   </div></div>`;
 }
 
