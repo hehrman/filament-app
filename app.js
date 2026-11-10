@@ -1,12 +1,12 @@
-import { creditIsDirector, fold, matchFilm, matchOccurrence, titleKey } from "./match.js?v=20261110043250";
+import { creditIsDirector, fold, matchFilm, matchOccurrence, titleKey } from "./match.js?v=20261110043825";
 import {
   ApiError, FRIENDS_API, cached, emailSignIn, forgetConnection, isLocal, joinFilament, joinInfo, letterboxdFeed, loadAll, loadConnection,
   makeSource, mutateSettings, saveConnection,
-} from "./data.js?v=20261110043250";
-import { followList, forYou, importExport, lookup, lovedDirectors, mergeFeed, recentlyWatched, stars } from "./letterboxd.js?v=20261110043250";
+} from "./data.js?v=20261110043825";
+import { followList, forYou, importExport, lookup, lovedDirectors, mergeFeed, recentlyWatched, stars } from "./letterboxd.js?v=20261110043825";
 import {
   filmographyFor, searchCatalog, searchWikidataDirectors, searchWikidataFilms, slugFromCatalog,
-} from "./search.js?v=20261110043250";
+} from "./search.js?v=20261110043825";
 
 const TZ = "America/New_York";
 const app = document.getElementById("app");
@@ -64,6 +64,7 @@ const ICON = {
   share: `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3.5M8 7l4-4 4 4"/><path d="M7 10H5.5A1.5 1.5 0 0 0 4 11.5v8A1.5 1.5 0 0 0 5.5 21h13a1.5 1.5 0 0 0 1.5-1.5v-8A1.5 1.5 0 0 0 18.5 10H17"/></svg>`,
   info: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5"/><circle cx="12" cy="7.8" r=".6" fill="currentColor"/></svg>`,
   refresh: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/></svg>`,
+  friends: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8.5" r="3.2"/><path d="M3.5 19c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5"/><circle cx="16.5" cy="9.5" r="2.6"/><path d="M15.5 14.2c2.4 0 4.3 1.5 4.9 4.3"/></svg>`,
   check: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M5.6 18.4a9 9 0 0 1 0-12.8M18.4 5.6a9 9 0 0 1 0 12.8M8.5 15.5a5 5 0 0 1 0-7M15.5 8.5a5 5 0 0 1 0 7"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/></svg>`,
 };
 const TURNBUCKLE = `<svg viewBox="0 0 46 12" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="6" cy="6" r="3"/><path d="M9 6h4"/><rect x="13" y="2.5" width="20" height="7" rx="3.5"/><path d="M17 6h12" stroke-dasharray="1.5 1.5"/><path d="M33 6h4"/><circle cx="40" cy="6" r="3"/></svg>`;
@@ -867,7 +868,7 @@ function joinScreen() {
 
 /* ------------------------------------------------------------ render */
 const navOf = (v) => (v === "help" ? "settings" : v);
-const NAV = [["upcoming", "Upcoming", ICON.upcoming], ["watch", "Following", ICON.watch], ["settings", "Settings", ICON.settings]];
+const NAV = [["upcoming", "Upcoming", ICON.upcoming], ["watch", "Following", ICON.watch], ["friends", "Friends", ICON.friends], ["settings", "Settings", ICON.settings]];
 
 function render() {
   if (!state.src) { app.innerHTML = state.join ? joinScreen() : welcome(state.error); bindWelcome(); return; }
@@ -876,7 +877,7 @@ function render() {
   const counts = { upcoming: state.data ? upcomingItems().filter((d) => d.status === "active").length : "", watch: (settings().directors.length + settings().films.length) || "",
     settings: (D().feedback?.items || []).filter((x) => x.status !== "done").length || "" };
   const view = state.loading && !state.data ? `<div class="page"><div class="skeleton" style="height:150px"></div><div class="skeleton"></div><div class="skeleton"></div></div>`
-    : ({ upcoming: viewUpcoming, watch: viewWatchlist, settings: viewSettings, help: viewHelp }[state.view] || viewUpcoming)();
+    : ({ upcoming: viewUpcoming, watch: viewWatchlist, friends: viewFriends, settings: viewSettings, help: viewHelp }[state.view] || viewUpcoming)();
   const active = document.activeElement?.id;
   const caret = active && document.activeElement.selectionStart;
   const kept = paint(`
@@ -888,7 +889,7 @@ function render() {
     </aside>
     <main class="main${state.enter ? " main--enter" : ""}" id="main">
       <div class="topbar"><span class="wordmark">${lamp(lampState)}<span class="wordmark__type">Filament</span></span>
-        <span class="topbar__title" aria-hidden="true">${h({ upcoming: "Upcoming", watch: "Following", settings: "Settings", help: "About & Help" }[state.view])}</span>
+        <span class="topbar__title" aria-hidden="true">${h({ upcoming: "Upcoming", watch: "Following", friends: "Friends", settings: "Settings", help: "About & Help" }[state.view])}</span>
         <span class="topbar__actions"><button class="icon-btn" data-action="nav" data-view="help" aria-label="About & Help">${ICON.info}</button>${isFriend() ? `<button class="icon-btn" data-action="reload" aria-label="Refresh">${ICON.refresh}</button>` : `<button class="icon-btn${state.running ? " icon-btn--busy" : ""}" data-action="check-ask" aria-label="Check for new screenings now">${ICON.check}</button>`}</span></div>
       ${state.error ? `<div class="console__error" style="margin:0 0 18px">${h(state.error)}</div>` : ""}
       ${view}
@@ -1041,26 +1042,45 @@ function openDirector(id) {
   dragToDismiss(sheetRoot.querySelector(".sheet"));
 }
 /* ------------------------------------------------------------ I'm going */
+function friendsPlans() {
+  const today = todayISO(), occs = D().listings?.occurrences || {};
+  return Object.entries(D().going?.going || {})
+    .map(([key, people]) => ({ key, occ: occs[key], others: people.filter((g) => g.id !== myGoingId()), me: people.find((g) => g.id === myGoingId()) }))
+    .filter((r) => r.occ && r.occ.date >= today)
+    .sort((a, b) => a.occ.date.localeCompare(b.occ.date) || toMin((a.occ.showtimes || [])[0]) - toMin((b.occ.showtimes || [])[0]));
+}
 function friendsGoingBlock() {
-  const today = todayISO(), until = nyDate(new Date(Date.now() + 7 * 864e5));
-  const occs = D().listings?.occurrences || {};
-  const rows = Object.entries(D().going?.going || {})
-    .map(([key, people]) => ({ key, occ: occs[key], others: people.filter((g) => g.id !== myGoingId()) }))
-    .filter((r) => r.occ && r.others.length && r.occ.date >= today && r.occ.date <= until)
-    .sort((a, b) => a.occ.date.localeCompare(b.occ.date))
-    .slice(0, 3);
-  if (!rows.length) return "";
-  return `<section class="fgoing" aria-label="Friends are going">
-    <h2 class="fgoing__title">Friends are going</h2>
-    ${rows.map((r) => {
-      const n = r.others.map((g) => g.name);
-      const who = n.length === 1 ? n[0] : `${n[0]} + ${n.length - 1}`;
-      const when = r.occ.date === today ? "Tonight" : daysFrom(r.occ.date) === 1 ? "Tomorrow" : fmtDay(r.occ.date, { weekday: "short" });
-      return `<button class="fgoing__row" data-action="open" data-key="${h(r.key)}"><span class="fgoing__who">${h(who)}</span>
-        <span class="fgoing__what"><b>${h(r.occ.films.map((f) => f.title).join(" + "))}</b> · ${h(when)}${r.occ.showtimes?.[0] ? ` ${h(r.occ.showtimes[0])}` : ""} · ${h(r.occ.venue)}</span>
-        ${imGoing(r.key) ? `<span class="going-tag">You too</span>` : `<span aria-hidden="true" class="fgoing__go">›</span>`}</button>`;
-    }).join("")}
-  </section>`;
+  const until = nyDate(new Date(Date.now() + 7 * 864e5));
+  const n = friendsPlans().filter((r) => r.others.length && r.occ.date <= until).length;
+  if (!n) return "";
+  return `<button class="fgoing-teaser" data-action="nav" data-view="friends">${ICON.friends}<span>Friends are going to ${plural(n, "screening")} this week</span><span aria-hidden="true">›</span></button>`;
+}
+function planRow(r, who) {
+  const today = todayISO();
+  const when = r.occ.date === today ? "Tonight" : daysFrom(r.occ.date) === 1 ? "Tomorrow" : fmtDay(r.occ.date, { weekday: "short", month: "short", day: "numeric" });
+  return `<button class="fgoing__row" data-action="open" data-key="${h(r.key)}">${posterImg(r.occ.poster, "fgoing__poster") || `<span class="fgoing__poster fgoing__poster--empty plywood" aria-hidden="true"></span>`}
+    <span class="fgoing__main"><b>${h(r.occ.films.map((f) => f.title).join(" + "))}</b>
+      <span>${h(when)}${r.occ.showtimes?.[0] ? ` · ${h(r.occ.showtimes[0])}` : ""} · ${h(r.occ.venue)}</span>
+      ${who ? `<span class="fgoing__who">${who}</span>` : ""}</span><span aria-hidden="true" class="fgoing__go">›</span></button>`;
+}
+function viewFriends() {
+  const plans = friendsPlans();
+  const mine = plans.filter((r) => r.me);
+  const theirs = plans.filter((r) => r.others.length);
+  const names = (r) => r.others.map((g) => `${h(g.name)}${g.seats ? ` <span class="fgoing__seat">${h(g.seats)}</span>` : ""}`).join(", ");
+  const owner = !isFriend() && !isLocal();
+  const joinOn = owner && D().friends?.join?.enabled !== false && D().friends?.join?.key;
+  return `<div class="page">
+    <header class="page-head"><div><h1 class="page-title">Friends</h1><p class="page-sub">Who’s going to what, and where they’re sitting</p></div></header>
+    <h2 class="settings-section">Your plans</h2>
+    ${mine.length ? `<div class="fgoing">${mine.map((r) => planRow(r, `You${r.me.seats ? ` <span class="fgoing__seat">${h(r.me.seats)}</span>` : ""}${r.others.length ? ` · with ${names(r)}` : ""}`)).join("")}</div>`
+      : `<p class="settings-lede">Tap <b>I’m going</b> on any screening. It shows here, and friends who see that screening will know. Add your seats once you’ve booked so they can sit nearby.</p>`}
+    <h2 class="settings-section">Friends are going</h2>
+    ${theirs.length ? `<div class="fgoing">${theirs.map((r) => planRow(r, `${names(r)}${r.me ? " · you too" : ""}`)).join("")}</div>`
+      : `<p class="settings-lede">Nothing yet. When a friend taps “I’m going”, it appears here${(settings().notifications || {}).notify_friends === false ? "" : ", and you’ll get a note if it’s something you follow"}.</p>`}
+    ${owner ? `<div class="group" style="margin-top:26px"><div class="row"><div class="row__main"><div class="row__title">Invite friends</div><div class="row__sub">${joinOn ? "Share your join link" : "Set up your join link in Settings"}</div></div>
+      ${joinOn ? `<button class="btn btn--sm btn--brass" data-action="join-share">Share</button>` : `<button class="btn btn--sm" data-action="nav" data-view="settings">Settings</button>`}</div></div>` : ""}
+  </div>`;
 }
 
 const goingFor = (key) => D().going?.going?.[key] || [];
@@ -1682,12 +1702,12 @@ function rememberSearchSoon(q) {
 }
 
 /* --------------------------------------------------------- what's new */
-const WHATS_NEW = { id: "2026-11-taste", items: [
-  ["For you, with reasons", "Suggestions now learn your taste from your Letterboxd ratings (directors, cinematographers, writers, composers, genres) and say why: “Shot by Robby Müller, like Paris, Texas.”"],
-  ["Letterboxd in one step", "Connect with just your username. Import your full history any time from Following → Letterboxd."],
-  ["Settings, reorganized", "Alerts come first (how you’re told and what about), then Letterboxd, friends and this device."],
-  ["Feedback", "Friends can send bugs and ideas straight from Settings."],
-  ["A few more hidden things", "Some new directors are hiding in here. You might find one by tapping home."],
+const WHATS_NEW = { id: "2026-11-friends", items: [
+  ["Friends", "Tap “I’m going” on any screening. Friends see it, and can add their seats so you sit together."],
+  ["For you", "Picks from your Letterboxd ratings, each with the reason it’s for you."],
+  ["Letterboxd in one step", "Just your username. Following → Letterboxd."],
+  ["Nearest first", "Order each day by the theater closest to you. Settings → This device."],
+  ["A few hidden things", "About & Help → Three things to try."],
 ] };
 function maybeWhatsNew() {
   let seen = null;
@@ -2408,7 +2428,7 @@ function bindWelcome() {
 applyTheme();
 // Instant launch & offline: cache the app itself (never your data).
 if ("serviceWorker" in navigator && !isLocal()) {
-  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261110043250").catch(() => {}));
+  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261110043825").catch(() => {}));
 }
 // Friend invite links: #invite=<key>&api=<friends service> (the fragment never reaches any server).
 (function acceptInvite() {
