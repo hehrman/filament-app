@@ -1,12 +1,12 @@
-import { creditIsDirector, fold, matchFilm, matchOccurrence, titleKey } from "./match.js?v=20261110001939";
+import { creditIsDirector, fold, matchFilm, matchOccurrence, titleKey } from "./match.js?v=20261110020228";
 import {
   ApiError, FRIENDS_API, cached, emailSignIn, forgetConnection, isLocal, joinFilament, joinInfo, letterboxdFeed, loadAll, loadConnection,
   makeSource, mutateSettings, saveConnection,
-} from "./data.js?v=20261110001939";
-import { followList, forYou, importExport, lookup, lovedDirectors, mergeFeed, recentlyWatched, stars } from "./letterboxd.js?v=20261110001939";
+} from "./data.js?v=20261110020228";
+import { followList, forYou, importExport, lookup, lovedDirectors, mergeFeed, recentlyWatched, stars } from "./letterboxd.js?v=20261110020228";
 import {
   filmographyFor, searchCatalog, searchWikidataDirectors, searchWikidataFilms, slugFromCatalog,
-} from "./search.js?v=20261110001939";
+} from "./search.js?v=20261110020228";
 
 const TZ = "America/New_York";
 const app = document.getElementById("app");
@@ -64,6 +64,7 @@ const ICON = {
   share: `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3.5M8 7l4-4 4 4"/><path d="M7 10H5.5A1.5 1.5 0 0 0 4 11.5v8A1.5 1.5 0 0 0 5.5 21h13a1.5 1.5 0 0 0 1.5-1.5v-8A1.5 1.5 0 0 0 18.5 10H17"/></svg>`,
   info: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5"/><circle cx="12" cy="7.8" r=".6" fill="currentColor"/></svg>`,
   refresh: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/></svg>`,
+  check: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M5.6 18.4a9 9 0 0 1 0-12.8M18.4 5.6a9 9 0 0 1 0 12.8M8.5 15.5a5 5 0 0 1 0-7M15.5 8.5a5 5 0 0 1 0 7"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/></svg>`,
 };
 const TURNBUCKLE = `<svg viewBox="0 0 46 12" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="6" cy="6" r="3"/><path d="M9 6h4"/><rect x="13" y="2.5" width="20" height="7" rx="3.5"/><path d="M17 6h12" stroke-dasharray="1.5 1.5"/><path d="M33 6h4"/><circle cx="40" cy="6" r="3"/></svg>`;
 const lampSVG = `<svg viewBox="0 0 40 40" fill="none"><circle cx="20" cy="17" r="10.5" stroke="currentColor" stroke-opacity=".45" stroke-width="1.4"/><path class="filament" d="M14.5 18.5l2.2-3.5 2.2 3.5 2.2-3.5 2.2 3.5 2.2-3.5" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M15.5 26.5h9v4.5h-9z" fill="#B48A45"/><path d="M15.5 28.4h9" stroke="#120F0C" stroke-opacity=".4"/><path d="M18 31h4v2.2h-4z" fill="#7A5A28"/></svg>`;
@@ -155,12 +156,10 @@ function toMin(t) {
 function recency(d) {
   const recent = (ts) => ts && Date.now() - new Date(ts).getTime() < 3 * 864e5;
   if (d.status === "missing") return { cls: "tag--gone", text: "No longer listed" };
-  if (d.pending) return { cls: "tag--pending", text: "Just matched · emailed next check" };
   const ev = (d.events || []).filter((e) => recent(e.at)).pop();
   if (ev && ev.kind === "rescheduled" && ev.from_date) return { cls: "tag--update", text: `Moved from ${fmtDay(ev.from_date, { month: "short", day: "numeric" })}` };
   if (ev && ["showtime_added", "time_changed", "showtime_removed"].includes(ev.kind)) return { cls: "tag--update", text: ev.kind === "showtime_added" ? "New showtime" : "Time changed" };
-  if (recent(d.discovered_at)) return { cls: "tag--new", text: "New" };
-  return null;
+  return null;                       // no "New" on everything: the alert already told you
 }
 const newTimes = (d) => {
   const ev = (d.events || []).filter((e) => e.kind === "showtime_added").pop();
@@ -199,7 +198,7 @@ function screeningCard(d, { muted } = {}) {
   const tag = recency(d);
   const seen = seenTag(d.films);
   const fresh = newTimes(d);
-  const fmt = [...new Set(d.films.map((f) => f.format).filter(Boolean))];
+  const fmt = [...new Set(d.films.map((f) => f.format).filter((x) => x && !/^(dcp|digital|digital video|blu-?ray|video)$/i.test(x)))];   // only formats worth noticing
   const films = d.films.map((f) => `
     <h3 class="card__title">${h(f.title)}</h3>
     <div class="card__meta">${h(directorsOf(f) || "Director not listed")}${f.year ? `<span class="dot">·</span>${f.year}` : ""}${f.runtime ? `<span class="dot">·</span>${f.runtime} min` : ""}</div>`).join("");
@@ -210,9 +209,8 @@ function screeningCard(d, { muted } = {}) {
       <span class="card__content">
       ${tag || fmt.length || seen ? `<span class="card__top">${tag ? `<span class="tag ${tag.cls}">${h(tag.text)}</span>` : ""}${fmt.map((x) => `<span class="tag tag--fmt">${h(x)}</span>`).join("")}${seen}</span>` : ""}
       ${films}
-      <span class="card__where"><span class="venue">${h(d.venue)}</span>${d.series ? `<span class="series">${h(d.series)}</span>` : ""}</span>
+      <span class="card__where"><span class="venue">${h(d.venue)}</span></span>
       <span class="times">${(d.showtimes?.length ? d.showtimes : ["Time TBA"]).map((t) => `<span class="time${fresh.has(t) ? " time--new" : ""}">${h(t)}</span>`).join("")}</span>
-      ${d.notes?.length ? `<span class="notes" style="display:block">✱ ${h(d.notes.join(" · "))}</span>` : ""}
       </span>
     </span>
   </button>`;
@@ -221,16 +219,17 @@ function screeningCard(d, { muted } = {}) {
 function dayGroups(items) {
   const byDay = new Map();
   for (const it of items) { if (!byDay.has(it.date)) byDay.set(it.date, []); byDay.get(it.date).push(it); }
-  return [...byDay].map(([date, its]) => `
+  const today = todayISO();
+  return [...byDay].map(([date, its]) => {
+    const n = daysFrom(date);
+    const rel = date === today ? "Tonight" : n === 1 ? "Tomorrow" : fmtDay(date, { weekday: "long" });
+    const when = date === today || n === 1 ? fmtDay(date, { weekday: "short", month: "short", day: "numeric" }) : fmtDay(date, { month: "short", day: "numeric" });
+    return `
     <section class="day" aria-label="${h(fmtDay(date, { weekday: "long", month: "long", day: "numeric" }))}">
-      <div class="day__badge${date === todayISO() ? " day__badge--today" : ""}">
-        <div class="day__num">${fmtDay(date, { day: "numeric" })}</div>
-        <div class="day__dow">${fmtDay(date, { weekday: "short" })}</div>
-        <div class="day__mon">${fmtDay(date, { month: "long" })}</div>
-        ${relDay(date) ? `<div class="day__rel">${relDay(date)}</div>` : ""}
-      </div>
+      <h3 class="day__head${date === today ? " day__head--today" : ""}"><span class="day__rel">${h(rel)}</span><span class="day__date">${h(when)}</span></h3>
       <div class="day__list">${its.map((d) => screeningCard(d)).join("")}</div>
-    </section>`).join("");
+    </section>`;
+  }).join("");
 }
 
 function nextCheckISO() {
@@ -275,7 +274,6 @@ function consoleBlock() {
     <div class="console__body">
       ${lamp(lampState, true)}
       <div><p class="console__headline">${headline}</p><div class="console__meta">${meta.map((m) => `<span>${m}</span>`).join("")}</div></div>
-      ${isFriend() ? "" : `<button class="btn btn--brass" data-action="check" ${state.running ? "disabled" : ""}>${state.running ? "Checking…" : "Check now"}</button>`}
     </div>${err}
   </section>`;
 }
@@ -442,8 +440,10 @@ function viewUpcoming() {
     ${setup}
     ${consoleBlock()}
     ${setup ? "" : names.length && !isFriend() ? homeScreenTip() : ""}
-    ${all.length ? `<div class="when seg" role="group" aria-label="When">${WHEN.map(([k, l]) => `<button data-action="when" data-v="${k}" aria-pressed="${state.when === k}">${l}</button>`).join("")}</div>` : ""}
-    ${items.length ? `${wireEl()}<div style="height:22px"></div>` : ""}
+    ${all.length ? `<section class="showing" aria-label="Now showing">
+      <div class="showing__head"><h2 class="marquee">Now Showing</h2><span class="showing__count">${plural(items.length, "screening")}${state.when !== "all" ? ` · ${h(WHEN.find(([k]) => k === state.when)[1].toLowerCase())}` : ""}</span></div>
+      <div class="when" role="radiogroup" aria-label="Filter the screenings below"><span class="when__label">Show</span>${WHEN.map(([k, l]) => `<button class="when__chip" role="radio" data-action="when" data-v="${k}" aria-pressed="${state.when === k}" aria-checked="${state.when === k}">${l}</button>`).join("")}</div>
+    </section>` : ""}
     ${setup && !names.length ? "" : body}
     ${forYouBlock()}`}
   </div>`;
@@ -900,27 +900,60 @@ function render() {
     : { upcoming: viewUpcoming, watch: viewWatchlist, archive: viewArchive, settings: viewSettings, help: viewHelp }[state.view]();
   const active = document.activeElement?.id;
   const caret = active && document.activeElement.selectionStart;
-  app.innerHTML = `
+  const kept = paint(`
     <aside class="rail">
       <a class="wordmark" href="#" data-action="nav" data-view="upcoming">${lamp(lampState)}<span class="wordmark__type">Filament</span></a>
       ${wireEl()}
       <nav class="nav" aria-label="Sections" style="--i:${NAV.findIndex(([k]) => k === navOf(state.prevView || state.view))}"><span class="nav-pill" aria-hidden="true"></span>${NAV.map(([k, l, i]) => `<button class="nav__item" data-action="nav" data-view="${k}" ${navOf(state.view) === k ? 'aria-current="page"' : ""}>${i}<span>${l}</span><span class="nav__count">${counts[k] ?? ""}</span></button>`).join("")}</nav>
-      <div class="rail__foot"><button class="rail__help" data-action="nav" data-view="help">${ICON.info}<span>About & Help</span></button>Watching New York’s screening calendar.<br>${state.data ? `Next check ${h(fmtWhen(nextCheckISO()))}.` : ""}</div>
+      <div class="rail__foot">${isFriend() ? "" : `<button class="rail__help${state.running ? " icon-btn--busy" : ""}" data-action="check-ask">${ICON.check}<span>${state.running ? "Checking…" : "Check now…"}</span></button>`}<button class="rail__help" data-action="nav" data-view="help">${ICON.info}<span>About & Help</span></button>Watching New York’s screening calendar.<br>${state.data ? `Next check ${h(fmtWhen(nextCheckISO()))}.` : ""}</div>
     </aside>
     <main class="main${state.enter ? " main--enter" : ""}" id="main">
       <div class="topbar"><span class="wordmark">${lamp(lampState)}<span class="wordmark__type">Filament</span></span>
         <span class="topbar__title" aria-hidden="true">${h({ upcoming: state.find.trim().length >= 2 ? "Is it playing?" : "Upcoming", watch: "Watchlist", archive: "Archive", settings: "Settings", help: "About & Help" }[state.view])}</span>
-        <span class="topbar__actions"><button class="icon-btn" data-action="nav" data-view="help" aria-label="About & Help">${ICON.info}</button><button class="icon-btn" data-action="reload" aria-label="Refresh">${ICON.refresh}</button></span></div>
+        <span class="topbar__actions"><button class="icon-btn" data-action="nav" data-view="help" aria-label="About & Help">${ICON.info}</button>${isFriend() ? `<button class="icon-btn" data-action="reload" aria-label="Refresh">${ICON.refresh}</button>` : `<button class="icon-btn${state.running ? " icon-btn--busy" : ""}" data-action="check-ask" aria-label="Check for new screenings now">${ICON.check}</button>`}</span></div>
       ${state.error ? `<div class="console__error" style="margin:0 0 18px">${h(state.error)}</div>` : ""}
       ${view}
     </main>
-    <nav class="tabbar" aria-label="Sections" style="--i:${NAV.findIndex(([k]) => k === navOf(state.prevView || state.view))}"><span class="tab-pill" aria-hidden="true"></span>${NAV.map(([k, l, i]) => `<button class="tab" data-action="nav" data-view="${k}" ${(state.view === "help" ? "settings" : state.view) === k ? 'aria-current="page"' : ""}>${i}<span>${l}</span></button>`).join("")}</nav>`;
-  if (active) {
+    <nav class="tabbar" aria-label="Sections" style="--i:${NAV.findIndex(([k]) => k === navOf(state.prevView || state.view))}"><span class="tab-pill" aria-hidden="true"></span>${NAV.map(([k, l, i]) => `<button class="tab" data-action="nav" data-view="${k}" ${(state.view === "help" ? "settings" : state.view) === k ? 'aria-current="page"' : ""}>${i}<span>${l}</span></button>`).join("")}</nav>`);
+  if (active && !kept) {
     const el = document.getElementById(active);
     if (el) { el.focus(); try { el.setSelectionRange(caret, caret); } catch { /* not a text input */ } }
   }
   afterRender();
 }
+
+// Re-render everything *around* the field you're typing in, never the field itself,
+// so the iPhone keyboard keeps its place (no dropped letters, autocorrect stays sane).
+function paint(html) {
+  const act = document.activeElement;
+  const typing = act && act.id && app.contains(act) && act.matches("input:not([type=checkbox]):not([type=radio]):not([type=file]), textarea");
+  if (typing) {
+    const tpl = document.createElement("template");
+    tpl.innerHTML = html;
+    const fresh = tpl.content.getElementById(act.id);
+    const chain = (el, stop) => { const out = []; for (let x = el; x && x !== stop; x = x.parentNode) out.push(x); return out; };
+    const a = chain(act, app), b = fresh ? chain(fresh, tpl.content) : [];
+    if (fresh && a.length === b.length && a.every((x, i) => x.tagName === b[i].tagName)) {
+      for (let i = 0; i < a.length; i++) {
+        const parent = i + 1 < a.length ? a[i + 1] : app, fparent = i + 1 < b.length ? b[i + 1] : tpl.content;
+        const kids = [...fparent.childNodes], at = kids.indexOf(b[i]);
+        for (const n of [...parent.childNodes]) if (n !== a[i]) n.remove();
+        for (const n of kids.slice(0, at)) parent.insertBefore(n, a[i]);
+        for (const n of kids.slice(at + 1)) parent.appendChild(n);
+        if (i + 1 < a.length) {
+          for (const at2 of [...parent.attributes]) if (!fparent.hasAttribute(at2.name)) parent.removeAttribute(at2.name);
+          for (const at2 of [...fparent.attributes]) if (parent.getAttribute(at2.name) !== at2.value) parent.setAttribute(at2.name, at2.value);
+        }
+      }
+      return true;
+    }
+  }
+  app.innerHTML = html;
+  return false;
+}
+let renderSoon = 0;
+function scheduleRender(ms = 90) { clearTimeout(renderSoon); renderSoon = setTimeout(render, ms); }
+let secretSoon = 0;
 
 /* --------------------------------------------------------- the sheet */
 function findItem(key) {
@@ -935,20 +968,28 @@ const EVENT_TEXT = {
   removed: () => "Disappeared from the listings",
   reappeared: () => "Reappeared in the listings",
 };
+const venueInfo = (d) => D().catalog?.venues?.[d.venue_slug] || null;
 function openSheet(key) {
   const d = findItem(key);
   if (!d) return;
   const reasons = d.reasons || matchOccurrence(d, interests());
+  const addr = venueInfo(d)?.address;
+  const maps = `https://maps.apple.com/?q=${encodeURIComponent(addr ? `${d.venue}, ${addr}` : `${d.venue}, New York, NY`)}`;
+  const n = daysFrom(d.date);
+  const rel = d.date === todayISO() ? "Tonight" : n === 1 ? "Tomorrow" : "";
+  const single = d.films.length === 1 ? d.films[0] : null;
+  const fmts = [...new Set(d.films.map((f) => f.format).filter(Boolean))];
+  const meta = single ? [directorsOf(single), single.year, single.runtime ? `${single.runtime} min` : "", single.format].filter(Boolean).join(" · ")
+    : d.films.map((f) => f.title).join(" + ");
+  const lb = reasons.some((r) => r.kind === "letterboxd") ? null : d.films.map((f) => lookup(lbData(), f)).find((r) => r && (r.w || r.wl));
   const facts = [
-    ["Date", fmtDay(d.date, { weekday: "long", month: "long", day: "numeric", year: "numeric" })],
-    ["Showtimes", (d.showtimes || []).join(", ") || "Time TBA"],
+    d.films.length > 1 ? ["Programme", d.films.map((f) => `${f.title}${directorsOf(f) ? ` — ${directorsOf(f)}` : ""}${f.year ? ` (${f.year})` : ""}`).join("\n")] : null,
+    d.films.length > 1 && fmts.length ? ["Format", fmts.join(", ")] : null,
+    d.series ? ["Series", d.series] : null,
     endsAt(d) ? ["Ends", endsAt(d)] : null,
-    ["Venue", d.venue], d.series ? ["Series", d.series] : null,
-    ...d.films.flatMap((f, i) => [[d.films.length > 1 ? `Film ${i + 1}` : "Director", d.films.length > 1 ? `${f.title} — ${directorsOf(f)}` : directorsOf(f) || "Not listed"],
-      f.format ? ["Format", f.format] : null, f.runtime ? ["Runtime", `${f.runtime} minutes`] : null]),
     d.notes?.length ? ["Notes", d.notes.join(" · ")] : null,
-    reasons.length ? ["Why", [...new Set(reasons.map((r) => r.kind === "letterboxd" ? r.label : r.kind === "film" ? `You follow “${r.label}”` : `You follow ${r.label}`))].join("; ")] : null,
-    ...(reasons.some((r) => r.kind === "letterboxd") ? [] : d.films.map((f) => lookup(lbData(), f)).filter((r) => r && (r.w || r.wl)).slice(0, 1).map((r) => ["Letterboxd", r.r ? `You rated it ${stars(r.r)}` : r.w ? "You’ve seen it" : "On your watchlist"])),
+    reasons.length ? ["Why you’re seeing this", [...new Set(reasons.map((r) => r.kind === "letterboxd" ? r.label : r.kind === "film" ? `You follow “${r.label}”` : `You follow ${r.label}`))].join("; ")] : null,
+    lb ? ["Letterboxd", lb.r ? `You rated it ${stars(lb.r)}` : lb.w ? "You’ve seen it" : "On your watchlist"] : null,
   ].filter(Boolean);
   const evs = (d.events || []).slice().reverse();
   sheetRoot.innerHTML = `<div class="scrim" data-action="close-sheet"></div>
@@ -958,30 +999,42 @@ function openSheet(key) {
       <div class="sheet__hero">
         <button class="icon-btn sheet__close" data-action="close-sheet" aria-label="Close">${ICON.close}</button>
         <div class="sheet__head">${posterImg(d.poster, "sheet__poster")}<div>
-        <div class="eyebrow">${h(relDay(d.date) || fmtDay(d.date, { weekday: "long" }))} · ${h(d.venue)}</div>
         <h2 class="sheet__title" id="sheet-title">${h(d.films.map((f) => f.title).join(" + "))}</h2>
-        <div class="card__meta">${h(d.films.map((f) => [directorsOf(f), f.year].filter(Boolean).join(", ")).join(" · "))}</div>
+        <div class="card__meta">${h(meta)}</div>
         </div></div>
       </div>
-      <div class="sheet__section"><dl class="facts">${facts.map(([k, v]) => `<dt>${h(k)}</dt><dd>${h(v)}</dd>`).join("")}</dl></div>
+      <div class="sheet__section ww">
+        <div class="ww__when"><b>${h(rel || fmtDay(d.date, { weekday: "long" }))}</b> <span>${h(fmtDay(d.date, rel ? { weekday: "long", month: "long", day: "numeric" } : { month: "long", day: "numeric", year: "numeric" }))}</span></div>
+        <div class="ww__times">${(d.showtimes?.length ? d.showtimes : [null]).map((t) => `<button class="time time--btn" data-action="ics" data-key="${h(d.key)}" data-time="${h(t || "")}" aria-label="Add ${h(t || "this screening")} to your calendar">${h(t || "Time TBA")} ${ICON.calendar}</button>`).join("")}</div>
+        <div class="ww__hint">Tap a time to add it to your calendar</div>
+        <a class="ww__venue" href="${h(maps)}" target="_blank" rel="noopener"><span class="ww__vname">${h(d.venue)}</span>${addr ? `<span class="ww__addr">${h(addr)}</span>` : ""}<span class="ww__dir">Directions ›</span></a>
+      </div>
       <div class="sheet__section"><div class="actions">
-        <a class="btn btn--brass" href="${h(d.listing_url)}" target="_blank" rel="noopener">View listing</a>
-        ${d.film_url ? `<a class="btn" href="${h(d.film_url)}" target="_blank" rel="noopener">Film page</a>` : ""}
-        ${d.ticket_url ? `<a class="btn" href="${h(d.ticket_url)}" target="_blank" rel="noopener">Tickets</a>` : ""}
-        <a class="btn" href="https://maps.apple.com/?q=${encodeURIComponent(`${d.venue}, New York, NY`)}" target="_blank" rel="noopener">Directions</a>
-        <a class="btn" href="${h(letterboxdURL(d.films[0]))}" target="_blank" rel="noopener">Letterboxd</a>
+        ${d.ticket_url ? `<a class="btn btn--brass" href="${h(d.ticket_url)}" target="_blank" rel="noopener">Tickets</a>` : ""}
         <button class="btn" data-action="share" data-key="${h(d.key)}">${ICON.share} Share</button>
+        <a class="btn" href="${h(letterboxdURL(d.films[0]))}" target="_blank" rel="noopener">Letterboxd</a>
+        <a class="btn" href="${h(d.film_url || d.listing_url)}" target="_blank" rel="noopener">Full listing</a>
       </div></div>
-      <div class="sheet__section"><div class="group-label" style="margin-top:0">Add to Calendar</div><div class="actions">
-        ${(d.showtimes?.length ? d.showtimes : [null]).map((t) => `<button class="btn btn--sm" data-action="ics" data-key="${h(d.key)}" data-time="${h(t || "")}">${ICON.calendar} ${t ? h(t) : "Add (time TBA)"}</button>`).join("")}
-      </div></div>
+      ${facts.length ? `<div class="sheet__section"><dl class="facts">${facts.map(([k, v]) => `<dt>${h(k)}</dt><dd>${h(v).replace(/\n/g, "<br>")}</dd>`).join("")}</dl></div>` : ""}
       <div class="sheet__section"><div class="group-label" style="margin-top:0">Follow</div><div class="actions">${followButtons(d.films)}</div></div>
-      ${evs.length || d.discovered_at ? `<div class="sheet__section">${wireEl()}<div class="group-label" style="margin-top:14px">History</div><ul class="timeline">
+      ${evs.length || d.first_listed ? `<div class="sheet__section">${wireEl()}<div class="group-label" style="margin-top:14px">History</div><ul class="timeline">
         ${evs.map((e) => `<li>${h((EVENT_TEXT[e.kind] || (() => e.kind))(e))}<time>${h(fmtWhen(e.at))}</time></li>`).join("")}
         ${d.first_listed ? `<li>First listed<time>${h(fmtWhen(d.first_listed))}</time></li>` : ""}</ul></div>` : ""}
     </div>`;
   sheetRoot.querySelector(".sheet__close").focus();
   sheetRoot.dataset.key = key;
+  dragToDismiss(sheetRoot.querySelector(".sheet"));
+}
+function askCheck() {
+  const t = fmtTime12((settings().schedule?.times || ["09:00"])[0]);
+  sheetRoot.innerHTML = `<div class="scrim" data-action="close-sheet"></div>
+    <div class="sheet sheet--small" role="dialog" aria-modal="true" aria-labelledby="ck-title"><div class="sheet__grab"></div>
+      <div class="sheet__hero"><button class="icon-btn sheet__close" data-action="close-sheet" aria-label="Close">${ICON.close}</button>
+        <div class="eyebrow">Check now</div><h2 class="sheet__title" id="ck-title">${state.running ? "A check is running" : "Look for new screenings now?"}</h2>
+        <p class="page-sub">${state.running ? "Filament is reading every New York listing — about three minutes. Anything new shows up here and in your alerts."
+          : `You don’t need to — Filament checks by itself every morning at ${h(t)}. An extra check reads every New York listing again (about three minutes), and anything new is sent to you as usual.`}</p></div>
+      <div class="sheet__section"><div class="actions">${state.running ? `<button class="btn" data-action="close-sheet">OK</button>`
+        : `<button class="btn btn--brass" data-action="check">Check now</button><button class="btn" data-action="close-sheet">Not now</button>`}</div></div></div>`;
   dragToDismiss(sheetRoot.querySelector(".sheet"));
 }
 function closeSheet() {
@@ -1523,7 +1576,7 @@ function rememberSearchSoon(q) {
   recentTimer = setTimeout(() => {   // only remember searches you paused on, not every keystroke
     const k = fold(q);
     const secret = ["damn fine coffee", "the owls are not what they seem", "fire walk with me", "gotta light", "asa nisi masa", "la dolce vita", "breathless", "godard", "pierrot le fou"];
-    if (secret.some((x) => k.includes(x))) return;
+    if (secret.some((x) => k.includes(x)) || EGG_WORDS[k.replace(/[^a-z ]/g, "").replace(/\s+/g, " ").trim()]) return;
     const list = [q, ...recentSearches().filter((x) => fold(x) !== k)].slice(0, 6);
     try { localStorage.setItem("filament.recent", JSON.stringify(list)); } catch { /* ignore */ }
   }, 1500);
@@ -1719,10 +1772,10 @@ const EGG_WORDS = {
   "days of being wild": () => EGGS.wkw("One minute before three."),
   "almodovar": EGGS.almodovar, "pedro almodovar": EGGS.almodovar, "all about my mother": EGGS.almodovar, "todo sobre mi madre": EGGS.almodovar,
   "volver": EGGS.almodovar, "women on the verge of a nervous breakdown": EGGS.almodovar, "talk to her": EGGS.almodovar,
-  "spielberg": EGGS.moon, "steven spielberg": EGGS.moon, "et": EGGS.moon, "phone home": EGGS.moon, "et phone home": EGGS.moon,
+  "spielberg": EGGS.moon, "steven spielberg": EGGS.moon, "phone home": EGGS.moon, "et phone home": EGGS.moon, "et the extraterrestrial": EGGS.moon,
   "jaws": EGGS.jaws, "close encounters of the third kind": () => { toast("Re · Mi · Do · Do · Sol"); flicker(); },
   "fosse": EGGS.fosse, "bob fosse": EGGS.fosse, "all that jazz": EGGS.fosse, "cabaret": EGGS.fosse, "razzle dazzle": EGGS.fosse, "sweet charity": EGGS.fosse,
-  "paul thomas anderson": EGGS.frogs, "pta": EGGS.frogs, "magnolia": EGGS.frogs, "there will be blood": EGGS.milkshake, "i drink your milkshake": EGGS.milkshake,
+  "paul thomas anderson": EGGS.frogs, "magnolia": EGGS.frogs, "there will be blood": EGGS.milkshake, "i drink your milkshake": EGGS.milkshake,
   "boogie nights": () => { toast("You’re a star."); flicker(); }, "punch drunk love": () => once("pdl", 3600), "punchdrunk love": () => once("pdl", 3600), "phantom thread": () => toast("Kiss me, my girl, before I’m sick."),
   "spike lee": EGGS.dolly, "double dolly": EGGS.dolly, "malcolm x": EGGS.dolly, "do the right thing": EGGS.heat, "wake up": EGGS.heat,
   "wizard of oz": EGGS.oz, "the wizard of oz": EGGS.oz, "theres no place like home": EGGS.oz, "no place like home": EGGS.oz,
@@ -1976,7 +2029,9 @@ async function onAction(el, ev) {
   if (a === "afilter") { state.archiveFilter = el.dataset.f; return render(); }
   if (a === "app-icon") { setAppIcon(el.dataset.v); return render(); }
   if (a === "theme") { try { localStorage.setItem("filament.theme", el.dataset.t); } catch { /* ignore */ } applyTheme(); return render(); }
+  if (a === "check-ask") return askCheck();
   if (a === "check") {
+    closeSheet();
     try { await state.src.dispatch("check-now"); state.running = true; render(); toast("Checking today’s listings — about three minutes"); pollRun(); }
     catch (e) { toast(e.message); }
     return;
@@ -2159,13 +2214,23 @@ document.addEventListener("change", (ev) => {
   } else if (el.id === "recipient") {
     const v = el.value.trim();
     if (v && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) { toast("That doesn’t look like an email address"); return; }
-    saveSettings((s) => { s.notifications = { ...(s.notifications || {}), recipient: v }; }, "Update email address", "Saved");
+    if (v === (settings().notifications?.recipient || "")) return;          // nothing changed
+    // Save quietly: redrawing here would swallow a tap that blurred this field.
+    const fn = (s) => { s.notifications = { ...(s.notifications || {}), recipient: v }; };
+    fn(state.data.settings);
+    mutateSettings(state.src, fn, "Update email address").then((s) => { state.data.settings = s; toast("Saved"); })
+      .catch((e) => { toast(e.message || "Couldn’t save"); refresh(true); });
   }
 });
 document.addEventListener("input", (ev) => {
   if (ev.target.id === "q") runSearch(ev.target.value);
-  if (ev.target.id === "aq") { state.archiveQuery = ev.target.value; render(); }
-  if (ev.target.id === "find") { state.find = ev.target.value; render(); secretSearch(state.find); }
+  if (ev.target.id === "aq") { state.archiveQuery = ev.target.value; scheduleRender(); }
+  if (ev.target.id === "find") {
+    state.find = ev.target.value;
+    scheduleRender();
+    clearTimeout(secretSoon);                       // hidden things wait until you pause, so they never fire mid-word
+    secretSoon = setTimeout(() => secretSearch(state.find), 450);
+  }
   if (ev.target.id === "find" && ev.target.value.trim().length >= 3) rememberSearchSoon(ev.target.value.trim());
 });
 document.addEventListener("keydown", (ev) => {
@@ -2232,7 +2297,7 @@ function bindWelcome() {
 applyTheme();
 // Instant launch & offline: cache the app itself (never your data).
 if ("serviceWorker" in navigator && !isLocal()) {
-  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261110001939").catch(() => {}));
+  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261110020228").catch(() => {}));
 }
 // Friend invite links: #invite=<key>&api=<friends service> (the fragment never reaches any server).
 (function acceptInvite() {
