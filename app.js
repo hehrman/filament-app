@@ -1,12 +1,12 @@
-import { creditIsDirector, fold, matchFilm, matchOccurrence, titleKey } from "./match.js?v=20261110034703";
+import { creditIsDirector, fold, matchFilm, matchOccurrence, titleKey } from "./match.js?v=20261110041039";
 import {
   ApiError, FRIENDS_API, cached, emailSignIn, forgetConnection, isLocal, joinFilament, joinInfo, letterboxdFeed, loadAll, loadConnection,
   makeSource, mutateSettings, saveConnection,
-} from "./data.js?v=20261110034703";
-import { followList, forYou, importExport, lookup, lovedDirectors, mergeFeed, recentlyWatched, stars } from "./letterboxd.js?v=20261110034703";
+} from "./data.js?v=20261110041039";
+import { followList, forYou, importExport, lookup, lovedDirectors, mergeFeed, recentlyWatched, stars } from "./letterboxd.js?v=20261110041039";
 import {
   filmographyFor, searchCatalog, searchWikidataDirectors, searchWikidataFilms, slugFromCatalog,
-} from "./search.js?v=20261110034703";
+} from "./search.js?v=20261110041039";
 
 const TZ = "America/New_York";
 const app = document.getElementById("app");
@@ -208,13 +208,39 @@ function screeningCard(d, { muted } = {}) {
       <span class="card__content">
       ${tag || fmt.length || seen ? `<span class="card__top">${tag ? `<span class="tag ${tag.cls}">${h(tag.text)}</span>` : ""}${fmt.map((x) => `<span class="tag tag--fmt">${h(x)}</span>`).join("")}${seen}</span>` : ""}
       ${films}
-      <span class="card__where"><span class="venue">${h(d.venue)}</span>${goingLine(d.key, true) ? `<span class="going-tag">${h(goingLine(d.key, true))}</span>` : ""}</span>
+      <span class="card__where"><span class="venue">${h(d.venue)}</span>${getOrder() === "nearest" && milesLabel(d) ? `<span class="dist">${h(milesLabel(d))}</span>` : ""}${goingLine(d.key, true) ? `<span class="going-tag">${h(goingLine(d.key, true))}</span>` : ""}</span>
       <span class="times">${(d.showtimes?.length ? d.showtimes : ["Time TBA"]).map((t) => `<span class="time${fresh.has(t) ? " time--new" : ""}">${h(t)}</span>`).join("")}</span>
       </span>
     </span>
   </button>`;
 }
 
+const ORDERS = [["time", "Showtime"], ["nearest", "Nearest"], ["theater", "Theater"]];
+const getOrder = () => { try { return localStorage.getItem("filament.order") || "time"; } catch { return "time"; } };
+let here = null;              // your location, only when "Nearest" is chosen; never saved or sent anywhere
+const toMinutes = (d) => toMin((d.showtimes || [])[0] || "11:59PM");
+function distanceKm(d) {
+  const v = venueInfo(d);
+  if (!here || !v?.lat) return Infinity;
+  const r = Math.PI / 180, dLat = (v.lat - here.lat) * r, dLon = (v.lon - here.lon) * r;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(here.lat * r) * Math.cos(v.lat * r) * Math.sin(dLon / 2) ** 2;
+  return 12742 * Math.asin(Math.sqrt(a));
+}
+function sortDay(its) {
+  const o = getOrder();
+  const byTime = (a, b) => toMinutes(a) - toMinutes(b);
+  if (o === "theater") return its.slice().sort((a, b) => a.venue.localeCompare(b.venue) || byTime(a, b));
+  if (o === "nearest" && here) return its.slice().sort((a, b) => distanceKm(a) - distanceKm(b) || byTime(a, b));
+  return its.slice().sort(byTime);
+}
+function locate() {
+  if (!navigator.geolocation) { toast("This device can’t share its location"); return; }
+  navigator.geolocation.getCurrentPosition(
+    (p) => { here = { lat: p.coords.latitude, lon: p.coords.longitude }; render(); },
+    () => { toast("Location is off, so screenings stay in showtime order"); },
+    { maximumAge: 600000, timeout: 10000 });
+}
+const milesLabel = (d) => { const km = distanceKm(d); return Number.isFinite(km) ? `${(km * 0.621).toFixed(km < 1.6 ? 1 : 0)} mi` : ""; };
 function dayGroups(items) {
   const byDay = new Map();
   for (const it of items) { if (!byDay.has(it.date)) byDay.set(it.date, []); byDay.get(it.date).push(it); }
@@ -226,7 +252,7 @@ function dayGroups(items) {
     return `
     <section class="day" aria-label="${h(fmtDay(date, { weekday: "long", month: "long", day: "numeric" }))}">
       <h3 class="day__head${date === today ? " day__head--today" : ""}"><span class="day__rel">${h(rel)}</span><span class="day__date">${h(when)}</span></h3>
-      <div class="day__list">${its.map((d) => screeningCard(d)).join("")}</div>
+      <div class="day__list">${sortDay(its).map((d) => screeningCard(d)).join("")}</div>
     </section>`;
   }).join("");
 }
@@ -260,11 +286,12 @@ function consoleBlock() {
   let err = "";
   if (run && !run.ok && !state.running && !isFriend()) {
     const why = run.error_kind === "blocked" ? "Screen Slate refused GitHub’s computers this time. Filament tries again at the next check."
-      : run.error_kind === "scan" ? "Your history was left untouched, so nothing will be wrongly reported as cancelled." : "This looks like a bug. Ask Claude to take a look.";
+      : run.error_kind === "scan" ? "Your history was left untouched, so nothing will be wrongly reported as cancelled." : "This looks like a bug.";
     err = `<div class="console__error">${h(run.error)}<br><span style="color:var(--text-2)">${h(why)}</span></div>`;
   }
-  return `<section class="console" aria-label="Status">
-    <div class="console__body">${lamp(lampState)}<div><p class="console__headline">${headline}</p><div class="console__meta">${h(meta)}</div></div></div>${err}
+  const nextShort = state.running ? "about three minutes" : next ? `next check ${fmtWhen(next).replace(" at ", " ")}` : "";
+  return `<section class="console" aria-label="Status" title="${h(meta)}">
+    <p class="status-line">${lamp(lampState)}<b class="console__headline">${headline}</b>${nextShort ? `<span class="status-line__meta"> · ${h(nextShort)}</span>` : ""}</p>${err}
   </section>`;
 }
 const isFollowingCredit = (c) => settings().directors.some((d) => creditIsDirector(c, d));
@@ -426,6 +453,7 @@ function viewUpcoming() {
     ${setup}
     ${consoleBlock()}
     ${setup ? "" : names.length && !isFriend() ? homeScreenTip() : ""}
+    ${friendsGoingBlock()}
     ${all.length ? `<section class="showing" aria-label="Now showing">
       <div class="showing__head"><h2 class="marquee">Now Showing</h2><span class="showing__count">${plural(items.length, "screening")}${state.when !== "all" ? ` · ${h(WHEN.find(([k]) => k === state.when)[1].toLowerCase())}` : ""}</span></div>
       <div class="when" role="radiogroup" aria-label="Filter the screenings below"><span class="when__label">Show</span>${WHEN.map(([k, l]) => `<button class="when__chip" role="radio" data-action="when" data-v="${k}" aria-pressed="${state.when === k}" aria-checked="${state.when === k}">${l}</button>`).join("")}</div>
@@ -668,6 +696,7 @@ function viewSettings() {
       <div class="row"><div class="row__main"><div class="row__title">Last chance</div><div class="row__sub">Before a film’s final New York screening</div></div>
         <div class="seg">${[[0, "Off"], [1, "1 day"], [2, "2 days"], [7, "1 week"]].map(([v, l]) => `<button data-action="lc-days" data-v="${v}" aria-pressed="${lcDays(n) === v}">${l}</button>`).join("")}</div></div>
       ${row("Weekly digest", "Sundays at 9 AM", sw("weekly_digest", n.weekly_digest !== false, "Weekly digest"))}
+      ${row("Friends are going", "When a friend is going to something you follow", sw("notify_friends", n.notify_friends !== false, "Friends are going"))}
     </div>
     <details class="more filters-more" ${filtered ? "open" : ""}><summary>Only certain formats, theaters or days${filtered ? " · on" : ""}</summary>${filtersBlock(f)}</details>
 
@@ -685,6 +714,7 @@ function viewSettings() {
         : row("Connected to", h(state.src?.label || ""), isLocal() ? "" : `<button class="btn btn--sm btn--danger" data-action="disconnect">Disconnect</button>`)}
       ${isLocal() ? "" : row("Use on another device", "", `<button class="btn btn--sm" data-action="device-link">Share link</button>`)}
       ${homeScreenRow()}
+      ${row("Order screenings by", getOrder() === "nearest" ? "Uses your location while the app is open. Never saved." : "Within each day", `<div class="seg">${ORDERS.map(([k, l]) => `<button data-action="order" data-v="${k}" aria-pressed="${getOrder() === k}">${l}</button>`).join("")}</div>`)}
       ${row("Theme", "", `<div class="seg">${[["system", "Auto"], ["evening", "Evening"], ["daylight", "Daylight"]].map(([k, l]) => `<button data-action="theme" data-t="${k}" aria-pressed="${theme === k}">${l}</button>`).join("")}</div>`)}
       ${row("App icon", "", `<div class="icon-picks">${[["lamp", "Lamp"], ["plywood", "Plywood"], ["gilt", "Gilt"]].map(([k, l]) => `<button class="icon-pick" data-action="app-icon" data-v="${k}" aria-pressed="${appIcon() === k}" aria-label="${l} icon"><img src="${k === "lamp" ? "icon.svg" : `icon-${k}.svg`}" alt=""><span>${l}</span></button>`).join("")}</div>`)}
     </div>
@@ -718,7 +748,7 @@ const FAQ = [
   ["Emails or notifications?", "Both, if you like. Emails group everything new from a check into one message, plus a Sunday “Playing this week” digest. Phone notifications (Settings → Phone notifications) put the same news on your lock screen."],
   ["What will I be told about?", "New screenings of what you follow, changes (moved dates, new or changed showtimes), cancellations, and a “last chance” reminder when a film’s run is down to its final screening. Each piece of news only once. Filters in Settings can limit emails to, say, 35mm prints or certain theaters."],
   ["Can I buy tickets here?", "No. Filament points you to each theater’s own ticket page (“Tickets”), where you buy directly from the venue."],
-  ["Does it cost anything?", "No. It runs within free allowances from GitHub (scheduling and hosting) and Resend (email)."],
+  ["Does it cost anything?", "No. Filament is free."],
   ["The app looks out of date.", "Pull down on Upcoming to refresh. If a new version doesn’t appear, close Filament fully and reopen it. Updates arrive within about ten minutes."],
   ["I didn’t get an email.", "Check spam, then Settings → Send test email. If a check fails twice in a row, Filament emails you about that too."],
   ["How do I put it on my iPhone?", "Open it in Safari, tap Share (on newer iPhones it’s in the ••• menu), then Add to Home Screen. It then opens full-screen like an app, works offline, and can send notifications."],
@@ -993,6 +1023,28 @@ function openDirector(id) {
   dragToDismiss(sheetRoot.querySelector(".sheet"));
 }
 /* ------------------------------------------------------------ I'm going */
+function friendsGoingBlock() {
+  const today = todayISO(), until = nyDate(new Date(Date.now() + 7 * 864e5));
+  const occs = D().listings?.occurrences || {};
+  const rows = Object.entries(D().going?.going || {})
+    .map(([key, people]) => ({ key, occ: occs[key], others: people.filter((g) => g.id !== myGoingId()) }))
+    .filter((r) => r.occ && r.others.length && r.occ.date >= today && r.occ.date <= until)
+    .sort((a, b) => a.occ.date.localeCompare(b.occ.date))
+    .slice(0, 3);
+  if (!rows.length) return "";
+  return `<section class="fgoing" aria-label="Friends are going">
+    <h2 class="fgoing__title">Friends are going</h2>
+    ${rows.map((r) => {
+      const n = r.others.map((g) => g.name);
+      const who = n.length === 1 ? n[0] : `${n[0]} + ${n.length - 1}`;
+      const when = r.occ.date === today ? "Tonight" : daysFrom(r.occ.date) === 1 ? "Tomorrow" : fmtDay(r.occ.date, { weekday: "short" });
+      return `<button class="fgoing__row" data-action="open" data-key="${h(r.key)}"><span class="fgoing__who">${h(who)}</span>
+        <span class="fgoing__what"><b>${h(r.occ.films.map((f) => f.title).join(" + "))}</b> · ${h(when)}${r.occ.showtimes?.[0] ? ` ${h(r.occ.showtimes[0])}` : ""} · ${h(r.occ.venue)}</span>
+        ${imGoing(r.key) ? `<span class="going-tag">You too</span>` : `<span aria-hidden="true" class="fgoing__go">›</span>`}</button>`;
+    }).join("")}
+  </section>`;
+}
+
 const goingFor = (key) => D().going?.going?.[key] || [];
 const myGoingId = () => (isFriend() ? state.src.id || state.src.name : "owner");
 const imGoing = (key) => goingFor(key).some((g) => g.id === myGoingId());
@@ -1328,7 +1380,7 @@ function friendsBlock() {
   const j = idx.join;
   if (!api) {
     return `<div class="group-label">Friends</div><div class="group"><div class="row"><div class="row__main"><div class="row__title">Invite friends</div>
-      <div class="row__sub">Friends get their own blank Filament. Their own directors, films, Letterboxd and alerts. Ask Claude to finish setting up the free friends service to turn this on.</div></div></div></div>`;
+      <div class="row__sub">Friends get their own blank Filament. Their own directors, films, Letterboxd and alerts. The friends service isn’t set up yet.</div></div></div></div>`;
   }
   const active = list.filter((f) => f.enabled !== false).length;
   const joinRow = !j ? `<div class="row"><div class="row__main"><div class="row__title">Invite friends</div>
@@ -1614,8 +1666,12 @@ function maybeWhatsNew() {
 const reducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 function transition(fn) {
-  if (document.startViewTransition && !reducedMotion()) document.startViewTransition(fn);
-  else fn();
+  if (!document.startViewTransition || reducedMotion()) return fn();
+  try {
+    const vt = document.startViewTransition(fn);
+    // A transition interrupted by another tap is fine: the page is already updated.
+    for (const p of [vt.ready, vt.finished, vt.updateCallbackDone]) p?.catch(() => {});
+  } catch { fn(); }
 }
 
 function afterRender() {
@@ -2054,6 +2110,11 @@ async function onAction(el, ev) {
   if (a === "fb-kind") { el.parentElement.querySelectorAll("button").forEach((b) => { const on = b === el; b.setAttribute("aria-pressed", on); b.setAttribute("aria-checked", on); }); return; }
   if (a === "fb-done") return feedbackDone(el.dataset.id);
   if (a === "going") return toggleGoing(el.dataset.key);
+  if (a === "order") {
+    try { localStorage.setItem("filament.order", el.dataset.v); } catch { /* ignore */ }
+    if (el.dataset.v === "nearest") locate();
+    render(); return;
+  }
   if (a === "fg-more") { state.expanded = { ...(state.expanded || {}), [el.dataset.id]: true }; return render(); }
   if (a === "dir-open") return openDirector(el.dataset.id);
   if (a === "egg-try") { const x = SHOWCASE.find(([k]) => k === el.dataset.k); if (x) x[2](); return; }
@@ -2304,7 +2365,7 @@ function bindWelcome() {
 applyTheme();
 // Instant launch & offline: cache the app itself (never your data).
 if ("serviceWorker" in navigator && !isLocal()) {
-  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261110034703").catch(() => {}));
+  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261110041039").catch(() => {}));
 }
 // Friend invite links: #invite=<key>&api=<friends service> (the fragment never reaches any server).
 (function acceptInvite() {
@@ -2342,6 +2403,7 @@ addEventListener("hashchange", () => {
   } catch { /* ignore a damaged link */ }
   history.replaceState(null, "", location.pathname + location.search);
 })();
+if (getOrder() === "nearest") setTimeout(locate, 800);
 const conn = loadConnection();
 if (isLocal() || conn) {
   state.src = makeSource(conn || {});
