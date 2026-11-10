@@ -1,12 +1,12 @@
-import { creditIsDirector, fold, matchFilm, matchOccurrence, titleKey } from "./match.js?v=20261110042037";
+import { creditIsDirector, fold, matchFilm, matchOccurrence, titleKey } from "./match.js?v=20261110042501";
 import {
   ApiError, FRIENDS_API, cached, emailSignIn, forgetConnection, isLocal, joinFilament, joinInfo, letterboxdFeed, loadAll, loadConnection,
   makeSource, mutateSettings, saveConnection,
-} from "./data.js?v=20261110042037";
-import { followList, forYou, importExport, lookup, lovedDirectors, mergeFeed, recentlyWatched, stars } from "./letterboxd.js?v=20261110042037";
+} from "./data.js?v=20261110042501";
+import { followList, forYou, importExport, lookup, lovedDirectors, mergeFeed, recentlyWatched, stars } from "./letterboxd.js?v=20261110042501";
 import {
   filmographyFor, searchCatalog, searchWikidataDirectors, searchWikidataFilms, slugFromCatalog,
-} from "./search.js?v=20261110042037";
+} from "./search.js?v=20261110042501";
 
 const TZ = "America/New_York";
 const app = document.getElementById("app");
@@ -291,7 +291,7 @@ function consoleBlock() {
   }
   const nextShort = state.running ? "about three minutes" : next ? `next check ${fmtWhen(next).replace(" at ", " ")}` : "";
   return `<section class="console" aria-label="Status" title="${h(meta)}">
-    <p class="status-line">${lamp(lampState)}<b class="console__headline">${headline}</b>${nextShort ? `<span class="status-line__meta"> · ${h(nextShort)}</span>` : ""}</p>${err}
+    <div class="status-line">${lamp(lampState)}<div><b class="console__headline">${headline}</b>${nextShort ? `<span class="status-line__meta">${h(nextShort[0].toUpperCase() + nextShort.slice(1))}</span>` : ""}</div></div>${err}
   </section>`;
 }
 const isFollowingCredit = (c) => settings().directors.some((d) => creditIsDirector(c, d));
@@ -2375,7 +2375,7 @@ function bindWelcome() {
 applyTheme();
 // Instant launch & offline: cache the app itself (never your data).
 if ("serviceWorker" in navigator && !isLocal()) {
-  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261110042037").catch(() => {}));
+  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261110042501").catch(() => {}));
 }
 // Friend invite links: #invite=<key>&api=<friends service> (the fragment never reaches any server).
 (function acceptInvite() {

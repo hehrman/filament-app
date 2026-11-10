@@ -1056,3 +1056,19 @@ body { overscroll-behavior-y: contain; }
 .ww__room b { font-weight: 600; font-size: 15.5px; }
 .ww__room span { color: var(--text-2); font-size: 14px; }
 .ww__room .ww__dir { color: var(--brass-hi); }
+
+/* Status: comfortable, not tiny (Nov 10, late) */
+.status-line { display: flex; align-items: center; gap: 12px; margin: 6px 0 4px; flex-wrap: nowrap; }
+.status-line > div { display: grid; gap: 2px; min-width: 0; }
+.status-line .lamp { width: 38px; height: 38px; flex: none; }
+.status-line .console__headline { font: 600 17px/1.25 var(--font); color: var(--text); }
+.status-line__meta { font-size: 14px; color: var(--text-2); }
+/* Now Showing: a real section header */
+.showing { margin: 30px 0 18px; }
+.showing__head { padding-bottom: 12px; }
+.marquee { font: 700 28px/1.15 var(--font-display); letter-spacing: -.02em; text-transform: none; color: var(--text); }
+.showing__count { font-size: 15px; }
+@media (max-width: 600px) { .marquee { font-size: 26px; } }
+/* Recent searches: plain label */
+.recents > span:first-child { font: 500 13px/1 var(--font); letter-spacing: 0; text-transform: none; color: var(--text-3); }
+.console { overflow: visible; border-radius: 0; }
