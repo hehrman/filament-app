@@ -1,12 +1,12 @@
-import { creditIsDirector, fold, matchFilm, matchOccurrence, titleKey } from "./match.js?v=20261110050851";
+import { creditIsDirector, fold, matchFilm, matchOccurrence, titleKey } from "./match.js?v=20261110132544";
 import {
   ApiError, FRIENDS_API, cached, emailSignIn, forgetConnection, isLocal, joinFilament, joinInfo, letterboxdFeed, loadAll, loadConnection,
   makeSource, mutateSettings, saveConnection,
-} from "./data.js?v=20261110050851";
-import { followList, forYou, importExport, lookup, lovedDirectors, mergeFeed, recentlyWatched, stars } from "./letterboxd.js?v=20261110050851";
+} from "./data.js?v=20261110132544";
+import { followList, forYou, importExport, lookup, lovedDirectors, mergeFeed, recentlyWatched, stars } from "./letterboxd.js?v=20261110132544";
 import {
   filmographyFor, searchCatalog, searchWikidataDirectors, searchWikidataFilms, slugFromCatalog,
-} from "./search.js?v=20261110050851";
+} from "./search.js?v=20261110132544";
 
 const TZ = "America/New_York";
 const app = document.getElementById("app");
@@ -720,6 +720,7 @@ function viewSettings() {
       ${isLocal() ? "" : row("Use on another device", "", `<button class="btn btn--sm" data-action="device-link">Share link</button>`)}
       ${homeScreenRow()}
       ${row("Order screenings by", getOrder() === "nearest" ? "Uses your location while the app is open. Never saved." : "Within each day", `<div class="seg">${ORDERS.map(([k, l]) => `<button data-action="order" data-v="${k}" aria-pressed="${getOrder() === k}">${l}</button>`).join("")}</div>`)}
+      ${row("Sounds for hidden things", "", `<label class="switch"><input type="checkbox" data-action="sounds" ${soundsOn() ? "checked" : ""} aria-label="Sounds for hidden things"><span></span></label>`)}
       ${row("Theme", "", `<div class="seg">${[["system", "Auto"], ["evening", "Evening"], ["daylight", "Daylight"]].map(([k, l]) => `<button data-action="theme" data-t="${k}" aria-pressed="${theme === k}">${l}</button>`).join("")}</div>`)}
       ${row("App icon", "", `<div class="icon-picks">${[["lamp", "Lamp"], ["plywood", "Plywood"], ["gilt", "Gilt"]].map(([k, l]) => `<button class="icon-pick" data-action="app-icon" data-v="${k}" aria-pressed="${appIcon() === k}" aria-label="${l} icon"><img src="${k === "lamp" ? "icon.svg" : `icon-${k}.svg`}" alt=""><span>${l}</span></button>`).join("")}</div>`)}
     </div>
@@ -739,34 +740,36 @@ function viewSettings() {
 }
 
 const FAQ = [
-  ["What is Filament?", "A personal watch over New York’s repertory, arthouse and independent screenings. You tell it which directors and films you love; it checks the city’s screening listings every morning and tells you when one of them is scheduled."],
-  ["Where do the listings come from?", "From Screen Slate, the independent daily guide to New York’s film screenings. Filament reads its public NYC listings once a day and links back to them. It covers repertory houses, museums and arthouse cinemas. Film Forum, Metrograph, BAM, IFC, Anthology, Film at Lincoln Center, MoMA, Alamo and many more, though not every multiplex."],
-  ["How often does it check?", "Every morning at 9:00 AM New York time, in the cloud. Your phone and laptop can be off."],
-  ["How far ahead does it look?", "As far as the listings go. It reads every published date and keeps going until there’s a long stretch with nothing scheduled, so it automatically reaches further when theaters announce further ahead."],
-  ["How does it know a film is by a director I follow?", "Each listing links its directors to a permanent ID number, so matching never depends on spelling. Individual films are matched by title (including alternate titles) and confirmed by year or director, so a remake with the same name won’t set it off."],
-  ["What does following a director do?", "Every screening of every film they directed, including ones you didn’t know about, shows up in Upcoming and in your emails. Follow a single film instead if you only care about that one."],
-  ["How does Letterboxd work here?", "Connect with just your username (Following → Letterboxd). No password. Films you rated 4.5★ or higher are followed automatically, anything you’ve logged is marked “Seen,” and each morning Filament reads your public diary so new favorites are picked up on their own. For your complete history and watchlist, import your Letterboxd export from the same page."],
-  ["How are “For you” picks chosen?", "From your Letterboxd ratings. Filament learns which directors, writers, cinematographers, composers, actors, genres and eras you rate above your own average (so a tough rater’s 4★ counts for more). Then checks everything playing in New York against that. Every pick says why, and nothing is suggested without real evidence. Films you’ve already seen are left out."],
-  ["Why isn’t a favorite showing up?", "If you watched it in the last 4 months, Filament assumes you don’t need a reminder yet. Change or turn off that rule in Settings → Letterboxd. It may also simply not be scheduled in New York right now. Try “Is it playing?” at the top of Upcoming."],
-  ["What gets stored about me?", "Only what Filament needs: your name and email (for alerts), the directors and films you follow, your settings, and from Letterboxd just titles, years, ratings, watch dates and your watchlist, never your profile or reviews. It’s kept private, never shared or sold, and there’s no password to leak."],
-  ["How do I use it on another phone or computer?", "Open Filament there and choose “Email me a sign-in link”, or in Settings tap “Share link” on a device you already use. No passwords."],
-  ["Emails or notifications?", "Both, if you like. Emails group everything new from a check into one message, plus a Sunday “Playing this week” digest. Phone notifications (Settings → Phone notifications) put the same news on your lock screen."],
-  ["What will I be told about?", "New screenings of what you follow, changes (moved dates, new or changed showtimes), cancellations, and a “last chance” reminder when a film’s run is down to its final screening. Each piece of news only once. Filters in Settings can limit emails to, say, 35mm prints or certain theaters."],
-  ["Can I buy tickets here?", "No. Filament points you to each theater’s own ticket page (“Tickets”), where you buy directly from the venue."],
+  ["What is Filament?", "Tell it the directors and films you love, and it tells you the moment one is scheduled in a New York theater, by phone notification or email. It also shows you what friends are going to, so you can go together."],
+  ["Where do the listings come from?", "From Screen Slate, the independent daily guide to New York’s film screenings. Filament reads its public New York listings once a day and links back to them. That covers repertory houses, museums and arthouse cinemas like Film Forum, Metrograph, BAM, IFC, Anthology, Film at Lincoln Center, MoMA and Alamo, though not every multiplex."],
+  ["How often does it check?", "Every morning at 9:00 AM New York time, in the cloud. Your phone and computer can be off."],
+  ["How far ahead does it look?", "As far as the listings go. It reads every published date, so it reaches further on its own when theaters announce further ahead."],
+  ["What does following a director do?", "Every screening of every film they directed, including ones you didn’t know about, shows up in Upcoming and in your alerts. Follow a single film instead if you only care about that one."],
+  ["How does it know a film is by a director I follow?", "Listings link each director to a permanent ID, so matching never depends on spelling. Single films are matched by title and confirmed by year or director, so a remake with the same name won’t set it off."],
+  ["How does Letterboxd work here?", "Connect with just your username in Following → Letterboxd. Films you rated 4.5★ or higher are followed automatically, anything you’ve logged is marked “Seen,” and new ratings are picked up each morning. For your full history and watchlist, import your Letterboxd export from the same page."],
+  ["How are “For you” picks chosen?", "From your Letterboxd ratings. Filament learns which directors, writers, cinematographers, genres and eras you rate above your own average, so a tough rater’s 4★ counts for more. It checks everything playing in New York against that, says why for every pick, and leaves out films you’ve seen."],
+  ["Why isn’t a favorite showing up?", "If you watched it in the last 4 months, Filament assumes you don’t need a reminder yet. You can change that in Following → Letterboxd. It may also simply not be playing in New York right now. Try “Is it playing?” at the top of Upcoming."],
+  ["How does Friends work?", "Tap “I’m going” on any screening. Friends who see that screening will know, and you can add your seats (or General admission) so you sit together. The Friends tab shows your plans and theirs, and you get a heads-up when a friend is going to something you follow."],
+  ["Who can see what I’m going to?", "Only people in your Filament, and only your first name and seats. Nobody sees what you follow, your Letterboxd or your email."],
+  ["What will I be told about?", "New screenings of what you follow, moved dates and changed showtimes, cancellations, a “last chance” reminder before a film’s final screening, and friends going to something you follow. Each piece of news only once. Settings → Alerts lets you choose, and narrow alerts to, say, 35mm prints or certain theaters."],
+  ["Emails or notifications?", "Either or both, in Settings → Alerts. Emails group everything new into one message, plus a Sunday “Playing this week” digest. Notifications put the same news on your lock screen."],
+  ["Can I buy tickets here?", "Filament takes you straight to each theater’s own ticket page. For Alamo, Metrograph and Nitehawk that’s the live seat map, so you can pick your seats there."],
+  ["What gets stored about me?", "Only what Filament needs: your first name and email, what you follow, your settings and plans, and from Letterboxd just titles, years, ratings, watch dates and your watchlist. It’s private, never shared or sold, and there’s no password to leak."],
+  ["How do I use it on another phone or computer?", "Open Filament there and choose “Email me a sign-in link,” or tap Settings → Use on another device on a phone you already use. No passwords."],
+  ["How do I put it on my iPhone?", "Open it in Safari, tap Share (on newer iPhones it’s in the ••• menu), then Add to Home Screen. It opens like an app and can send you notifications."],
+  ["I didn’t get an email.", "Check your spam folder, then make sure Settings → Alerts → Email is on and the address is right."],
+  ["The app looks out of date.", "Pull down on Upcoming to refresh. If that doesn’t do it, close Filament fully and open it again."],
   ["Does it cost anything?", "No. Filament is free."],
-  ["The app looks out of date.", "Pull down on Upcoming to refresh. If a new version doesn’t appear, close Filament fully and reopen it. Updates arrive within about ten minutes."],
-  ["I didn’t get an email.", "Check spam, then Settings → Send test email. If a check fails twice in a row, Filament emails you about that too."],
-  ["How do I put it on my iPhone?", "Open it in Safari, tap Share (on newer iPhones it’s in the ••• menu), then Add to Home Screen. It then opens full-screen like an app, works offline, and can send notifications."],
   ["How do I report a bug or suggest something?", "Settings → Send feedback. It goes straight to the person who runs Filament."],
-  ["Anything else?", "A few things are hidden. Try the lamp."],
+  ["Anything else?", "A few things are hidden. Try the lamp, or About & Help → Things to try."],
 ];
 const SHOWCASE = [
-  ["jaws", "Type “Jaws” into search", () => EGGS.jaws()],
   ["et", "Type “E.T. phone home”", () => EGGS.moon()],
+  ["jaws", "Type “Jaws” into search", () => EGGS.jaws()],
   ["oz", "Tap Upcoming three times", () => EGGS.oz()],
 ];
 function eggShowcase() {
-  return `<div class="group-label">Three things to try</div>
+  return `<div class="group-label">Things to try</div>
     <div class="group">${SHOWCASE.map(([k, l]) => `<div class="row"><div class="row__main"><div class="row__title">${l}</div></div><button class="btn btn--sm" data-action="egg-try" data-k="${k}">Show me</button></div>`).join("")}</div>
     <p class="group-foot">There are more. Think Lynch, Fellini, Godard, Wong Kar-wai…</p>`;
 }
@@ -1706,7 +1709,7 @@ const WHATS_NEW = { id: "2026-11-friends-4", items: [
   ["For you", "Picks that know your taste, learned from your Letterboxd ratings. Each one tells you exactly why."],
   ["Letterboxd in one step", "Just your username, and every film you’ve rated ★★★★½ or higher is followed for you."],
   ["Plan the night in one tap", "Tap a showtime and it’s in your calendar. Tap the theater for directions. Alamo, Metrograph and Nitehawk open straight to their seat maps."],
-  ["Something’s hiding", "A few directors are tucked away in here. Start with About & Help → Three things to try."],
+  ["Something’s hiding", "A few directors are tucked away in here. Start with About & Help → Things to try."],
 ] };
 function maybeWhatsNew() {
   let seen = null;
@@ -1828,8 +1831,10 @@ function secretSearch(q) {
     subtitle("Marcello, come here!");
     if (!reducedMotion()) { document.body.classList.add("dolce"); setTimeout(() => document.body.classList.remove("dolce"), 5200); }
   } else if (k === "breathless" || k === "a bout de souffle") {
+    [0, 0.35, 0.62, 0.9].forEach((at) => sfx.click(at, 0.12, 900));                          // splices
     if (!reducedMotion()) { document.body.classList.add("jumpcut"); setTimeout(() => document.body.classList.remove("jumpcut"), 1300); }
   } else if (k === "godard" || k === "pierrot le fou") {
+    for (let i = 0; i < 60; i++) sfx.click(i / 18, 0.05, 1600);                                // the projector runs
     if (!reducedMotion()) overlay("intertitles", ["UN", "FILM", "DE", "FILAMENT"].map((w, i) => `<b style="--i:${i}">${w}</b>`).join(""), 3400);
   } else if (EGG_WORDS[k]) {
     EGG_WORDS[k]();
@@ -1855,28 +1860,42 @@ const EGGS = {
       .map((s, i) => `<span style="--i:${i}">${s}</span>`).join(""), 3600);
   },
   // Wong Kar-wai: step-printed smear, neon
-  wkw(msg) { once("wkw", 2400); if (msg) subtitle(msg); },
+  wkw(msg) {
+    once("wkw", 3000);
+    if (!reducedMotion()) overlay("neon", "", 3000);
+    const now = new Intl.DateTimeFormat("en-US", { timeZone: TZ, hour: "numeric", minute: "2-digit" }).format(new Date());
+    // Chungking Express: "At the closest point, we were just 0.01 cm apart."
+    subtitle(msg || `${now}. We were 0.01 cm apart.`);
+  },
   // Pedro Almodóvar: blocks of his reds, pinks and blues
   almodovar() {
+    [0, 0.12, 0.36].forEach((at) => sfx.click(at + 0.2, 0.14, 1800));                          // castanets
     if (reducedMotion()) return subtitle("¡Qué maravilla!");
     overlay("almodovar", ["#E4002B", "#FF5FA2", "#FFD100", "#1C4BD8", "#00A86B", "#E4002B"].map((c, i) => `<i style="--c:${c};--i:${i}"></i>`).join(""), 2600);
   },
   // Steven Spielberg: a bicycle across the moon
   moon() {
+    sfx.noise(3.2, { gain: 0.03, freq: 500, sweep: 1600, attack: 0.8 });                        // night wind
+    sfx.chime([1046, 1318, 1568, 2093, 2637], { at: 1.2, step: 0.14, gain: 0.035 });           // the bike lifts off
     if (reducedMotion()) return subtitle("Phone home.");
     overlay("moon", `<div class="moon"><svg class="bike" viewBox="0 0 120 60" fill="currentColor"><circle cx="22" cy="44" r="12" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="92" cy="44" r="12" fill="none" stroke="currentColor" stroke-width="3"/><path d="M22 44 45 22h28l19 22M45 22l12 22h-35M66 10l7 12" stroke="currentColor" stroke-width="3" fill="none"/><circle cx="58" cy="9" r="6"/><path d="M52 14c-4 6-3 12 4 14l10-1 3-12z"/><rect x="70" y="2" width="12" height="9" rx="3"/></svg></div>`, 4200);
   },
   jaws() {
+    sfx.noise(4.5, { gain: 0.07, type: "lowpass", freq: 160, q: 0.5, attack: 1.2 });           // deep water
     subtitle("You’re gonna need a bigger boat.");
     if (!reducedMotion()) overlay("fin", `<svg viewBox="0 0 60 40"><path d="M2 38C18 32 30 18 34 2c6 14 14 28 24 36z" fill="#3b4b57"/></svg>`, 5200);
   },
   // Bob Fosse: a single spotlight
   fosse() {
+    sfx.noise(0.25, { gain: 0.1, type: "lowpass", freq: 220, attack: 0.005 });                 // the spotlight clunks on
+    [0.6, 1.1, 1.6, 2.1].forEach((at) => sfx.click(at, 0.16, 3000));                           // finger snaps
     subtitle("It’s showtime, folks!");
     if (!reducedMotion()) overlay("spot", "", 3800);
   },
   // Paul Thomas Anderson: it's raining frogs
   frogs() {
+    sfx.noise(4, { gain: 0.035, type: "highpass", freq: 2500, attack: 0.6 });                  // rain
+    for (let i = 0; i < 14; i++) sfx.tone(700 + Math.random() * 500, 0.12, { at: 0.4 + i * 0.22 + Math.random() * 0.1, gain: 0.05, slide: 180 });   // plops
     if (reducedMotion()) return subtitle("It did happen.");
     overlay("frogs", Array.from({ length: 26 }, (_, i) => `<span style="--x:${(i * 37) % 100};--d:${(i * 173) % 1400}ms;--s:${0.7 + ((i * 7) % 6) / 10}">🐸</span>`).join(""), 4200);
   },
@@ -1885,7 +1904,17 @@ const EGGS = {
   dolly() { once("dolly", 2600); },
   heat() { subtitle("Wake up!"); once("heat", 4200); },
   // The Wizard of Oz: sepia, then Technicolor
-  oz() { subtitle("There’s no place like home."); once("oz", 3400); },
+  oz() {
+    if (reducedMotion()) { subtitle("There’s no place like home."); return; }
+    document.body.classList.add("oz2");
+    overlay("twister", `<i></i><i></i><i></i>`, 2600);
+    sfx.noise(2.4, { gain: 0.06, freq: 300, sweep: 2400, q: 1.2, attack: 0.6 });               // the twister
+    setTimeout(() => sfx.noise(0.35, { gain: 0.14, type: "lowpass", freq: 140, attack: 0.005 }), 2400);   // the house lands
+    setTimeout(() => { document.body.classList.add("oz2--color"); overlay("brick", "", 4200); sfx.chime([784, 988, 1175, 1568], { gain: 0.04 }); }, 2700);
+    [3.4, 3.75, 4.1].forEach((s) => setTimeout(() => sfx.click(0, 0.14, 2600), s * 1000));     // three heel clicks
+    setTimeout(() => subtitle("There’s no place like home."), 4300);
+    setTimeout(() => document.body.classList.remove("oz2", "oz2--color"), 7600);
+  },
 };
 const EGG_WORDS = {
   "robert altman": EGGS.altman, "altman": EGGS.altman, "nashville": EGGS.altman, "the long goodbye": EGGS.altman, "mccabe and mrs miller": EGGS.altman, "mccabe mrs miller": EGGS.altman,
@@ -1933,6 +1962,37 @@ function followEgg(name) {
   }, { passive: true });
 })();
 
+/* Sounds for hidden things: all generated here (no recordings), quiet, and can be turned off. */
+const soundsOn = () => { try { return localStorage.getItem("filament.sounds") !== "off"; } catch { return true; } };
+const sfx = (() => {
+  let ac = null;
+  const ctx = () => { if (!ac) { const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return null; ac = new AC(); } if (ac.state === "suspended") ac.resume(); return ac; };
+  const out = (a, g0, at, dur, attack = 0.02) => {
+    const g = a.createGain();
+    g.gain.setValueAtTime(0, at); g.gain.linearRampToValueAtTime(g0, at + attack); g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+    g.connect(a.destination); return g;
+  };
+  const noiseBuf = (a, dur) => { const b = a.createBuffer(1, Math.max(1, Math.floor(a.sampleRate * dur)), a.sampleRate); const d = b.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; return b; };
+  const api = {
+    tone(freq, dur = 0.3, { at = 0, type = "sine", gain = 0.08, slide = null } = {}) {
+      const a = ctx(); if (!a || !soundsOn()) return; const t0 = a.currentTime + at;
+      const o = a.createOscillator(); o.type = type; o.frequency.setValueAtTime(freq, t0);
+      if (slide) o.frequency.exponentialRampToValueAtTime(slide, t0 + dur);
+      o.connect(out(a, gain, t0, dur)); o.start(t0); o.stop(t0 + dur + 0.05);
+    },
+    noise(dur = 0.3, { at = 0, gain = 0.06, type = "bandpass", freq = 1200, q = 0.8, sweep = null, attack = 0.02 } = {}) {
+      const a = ctx(); if (!a || !soundsOn()) return; const t0 = a.currentTime + at;
+      const s = a.createBufferSource(); s.buffer = noiseBuf(a, dur + 0.1);
+      const f = a.createBiquadFilter(); f.type = type; f.frequency.setValueAtTime(freq, t0); f.Q.value = q;
+      if (sweep) f.frequency.exponentialRampToValueAtTime(sweep, t0 + dur);
+      s.connect(f).connect(out(a, gain, t0, dur, attack)); s.start(t0); s.stop(t0 + dur + 0.1);
+    },
+    click(at = 0, gain = 0.12, freq = 2400) { api.noise(0.04, { at, gain, freq, q: 1.5, attack: 0.002 }); },
+    chime(notes, { at = 0, step = 0.12, gain = 0.05 } = {}) { notes.forEach((f, i) => api.tone(f, 0.9, { at: at + i * step, gain, type: "triangle" })); },
+  };
+  return api;
+})();
+
 // Hidden lines play like a film: letterbox bars glide in, the line appears as a subtitle.
 function subtitle(text) {
   document.querySelector(".egg--sub")?.remove();
@@ -1950,7 +2010,7 @@ function gotALight() {
   if (reducedMotion()) { subtitle("Got a light?"); return; }
   document.body.classList.add("woodsman");
   overlay("grain", "", 7000);
-  try { const v = new Audio("got-a-light.m4a?v=20261110050851"); v.volume = 0.9; v.play().catch(() => radioStatic(5)); } catch { radioStatic(5); }
+  try { const v = new Audio("got-a-light.m4a?v=20261110132544"); v.volume = 0.9; v.play().catch(() => radioStatic(5)); } catch { radioStatic(5); }
   setTimeout(() => subtitle("Got a light?"), 150);         // the line comes in the first second of the clip
   setTimeout(() => document.body.classList.remove("woodsman"), 7200);
 }
@@ -2367,6 +2427,9 @@ document.addEventListener("change", (ev) => {
   if (el.dataset.action === "toggle") {
     const { kind, id } = el.dataset, on = el.checked;
     saveSettings((s) => { const x = s[kind].find((i) => i.id === id); if (x) x.enabled = on; }, `${on ? "Resume" : "Pause"} monitoring`, on ? "Monitoring resumed" : "Paused");
+  } else if (el.dataset.action === "sounds") {
+    try { localStorage.setItem("filament.sounds", el.checked ? "on" : "off"); } catch { /* ignore */ }
+    if (el.checked) sfx.chime([988, 1318], { gain: 0.04 });
   } else if (el.dataset.action === "notif") {
     const keys = el.dataset.key.split(","), on = el.checked;
     saveSettings((s) => { s.notifications = { ...(s.notifications || {}) }; for (const k of keys) s.notifications[k] = on; }, "Update notification settings", "Saved");
@@ -2473,7 +2536,7 @@ function bindWelcome() {
 applyTheme();
 // Instant launch & offline: cache the app itself (never your data).
 if ("serviceWorker" in navigator && !isLocal()) {
-  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261110050851").catch(() => {}));
+  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261110132544").catch(() => {}));
 }
 // Friend invite links: #invite=<key>&api=<friends service> (the fragment never reaches any server).
 (function acceptInvite() {

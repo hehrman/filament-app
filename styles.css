@@ -1138,3 +1138,24 @@ body { overscroll-behavior-y: contain; }
 @keyframes flicker-white { 50% { opacity: 0; } }
 .ga-btn { margin-top: 8px; }
 .ga-btn[aria-pressed="true"] { color: var(--brass-hi); border-color: var(--brass); }
+
+/* Oz: Kansas in sepia, a twister, then Technicolor and a yellow brick road */
+.oz2 .app, .oz2 .tabbar { filter: sepia(1) saturate(.75) contrast(1.05); transition: filter .4s ease; }
+.oz2.oz2--color .app, .oz2.oz2--color .tabbar { filter: saturate(2.2) contrast(1.08) brightness(1.06); transition: filter 1.4s ease; }
+.egg--twister { display: grid; place-items: center; }
+.egg--twister i { position: absolute; width: 46vmin; height: 46vmin; border-radius: 50%; border: 2px solid rgba(90,70,40,.45);
+  border-left-color: transparent; border-bottom-color: transparent; animation: twist 2.6s ease-in both; }
+.egg--twister i:nth-child(2) { width: 30vmin; height: 30vmin; animation-duration: 2.2s; }
+.egg--twister i:nth-child(3) { width: 16vmin; height: 16vmin; animation-duration: 1.8s; }
+@keyframes twist { 0% { opacity: 0; transform: rotate(0) scale(.6); } 25% { opacity: 1; } 90% { opacity: .9; } 100% { opacity: 0; transform: rotate(1080deg) scale(1.15); } }
+.egg--brick { display: block; }
+.egg--brick::before { content: ""; position: fixed; left: 0; right: 0; bottom: 0; height: 14px;
+  background: repeating-linear-gradient(90deg, #F2C230 0 34px, #C79A16 34px 36px); box-shadow: 0 0 22px rgba(242,194,48,.7);
+  transform-origin: left; animation: road 4.2s cubic-bezier(.3,0,.2,1) both; }
+@keyframes road { 0% { transform: scaleX(0); } 35%, 80% { transform: scaleX(1); opacity: 1; } 100% { opacity: 0; } }
+/* Wong Kar-wai: step-printed neon, green and red */
+.egg--neon { display: block; mix-blend-mode: screen; animation: neon 3s steps(9, end) both;
+  background: radial-gradient(60% 40% at 20% 30%, rgba(0,255,170,.28), transparent 70%), radial-gradient(50% 40% at 80% 70%, rgba(255,40,80,.28), transparent 70%); }
+@keyframes neon { 0% { opacity: 0; } 15%, 75% { opacity: 1; } 100% { opacity: 0; } }
+.wkw .card, .wkw .day__head { animation: ghost 3s steps(6, end) both; }
+@keyframes ghost { 30%, 60% { filter: blur(1.2px) drop-shadow(14px 0 0 rgba(0,255,170,.35)) drop-shadow(-14px 0 0 rgba(255,40,80,.35)); } }
