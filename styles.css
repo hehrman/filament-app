@@ -1183,3 +1183,22 @@ body { overscroll-behavior-y: contain; }
 .btn--plain { background: transparent; border: 0; color: var(--text-2); }
 .btn--plain:disabled { opacity: .4; }
 .linkish { font: inherit; color: inherit; background: none; border: 0; padding: 0; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; cursor: pointer; }
+
+/* Comments and "which night?" */
+.talk__list { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 8px; }
+.talk__list li { font-size: 15px; line-height: 1.4; color: var(--text); position: relative; padding-right: 28px; overflow-wrap: anywhere; }
+.talk__ago { color: var(--text-3); font-size: 13px; margin-left: 4px; }
+.talk__x { position: absolute; right: 0; top: 0; width: 24px; height: 24px; border: 0; background: none; color: var(--text-3); display: grid; place-items: center; cursor: pointer; }
+.talk__x svg { width: 12px; height: 12px; }
+.talk__form { display: flex; gap: 8px; }
+.talk__form input { flex: 1; min-width: 0; height: 40px; border-radius: 10px; border: 1px solid var(--line-2); background: var(--surface-2); color: var(--text); padding: 0 12px; font: inherit; font-size: 16px; }
+.talk__poll { display: block; margin-top: 12px; font-size: 15px; color: var(--text-2); }
+.poll { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; margin-bottom: 12px; }
+.poll__head { display: flex; align-items: baseline; gap: 8px; position: relative; padding-right: 28px; margin-bottom: 6px; }
+.poll__head b { font-size: 17px; }
+.poll__head span { color: var(--text-3); font-size: 14px; }
+.poll__opt { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); }
+.poll__when { flex: 1; min-width: 0; text-align: left; background: none; border: 0; color: var(--text); font: inherit; padding: 0; cursor: pointer; display: grid; gap: 2px; }
+.poll__when span { color: var(--text-2); font-size: 14px; }
+.poll__vote { flex: none; height: 32px; padding: 0 12px; border-radius: 16px; border: 1px solid var(--line-2); background: transparent; color: var(--text-2); font: inherit; font-size: 14px; cursor: pointer; }
+.poll__vote[aria-pressed="true"] { background: var(--brass); color: #1A140C; border-color: transparent; }

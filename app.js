@@ -1,12 +1,12 @@
-import { creditIsDirector, fold, matchFilm, matchOccurrence, titleKey } from "./match.js?v=20261110150851";
+import { creditIsDirector, fold, matchFilm, matchOccurrence, titleKey } from "./match.js?v=20261110152124";
 import {
   ApiError, FRIENDS_API, cached, emailSignIn, forgetConnection, isLocal, joinFilament, joinInfo, letterboxdFeed, loadAll, loadConnection,
   makeSource, mutateSettings, saveConnection,
-} from "./data.js?v=20261110150851";
-import { followList, forYou, importExport, lookup, lovedDirectors, mergeFeed, recentlyWatched, stars } from "./letterboxd.js?v=20261110150851";
+} from "./data.js?v=20261110152124";
+import { followList, forYou, importExport, lookup, lovedDirectors, mergeFeed, recentlyWatched, stars } from "./letterboxd.js?v=20261110152124";
 import {
   filmographyFor, searchCatalog, searchWikidataDirectors, searchWikidataFilms, slugFromCatalog,
-} from "./search.js?v=20261110150851";
+} from "./search.js?v=20261110152124";
 
 const TZ = "America/New_York";
 const app = document.getElementById("app");
@@ -538,6 +538,7 @@ function viewUpcoming() {
     ${setup}
     ${consoleBlock()}
     ${setup ? "" : names.length && !isFriend() ? homeScreenTip() : ""}
+    ${logItPrompt()}
     ${friendsGoingBlock()}
     ${all.length ? `<section class="showing" aria-label="Now showing">
       <div class="showing__head"><h2 class="marquee">Now Showing</h2><span class="showing__count">${plural(items.length, "screening")}${state.when !== "all" ? ` · ${h(WHEN.find(([k]) => k === state.when)[1].toLowerCase())}` : ""}</span></div>
@@ -1103,6 +1104,7 @@ function openSheet(key) {
       ${imGoing(d.key) ? `<div class="sheet__section seats-row"><form class="seats-form" data-key="${h(d.key)}"><input id="going-seats" name="seats" maxlength="24" placeholder="Your seats, e.g. G7–G8" value="${h(mySeats(d.key) === "General admission" ? "" : mySeats(d.key))}" aria-label="Your seats" autocomplete="off"><button class="btn btn--sm">Save</button></form>
         <button class="btn btn--sm btn--ghost ga-btn" data-action="going-ga" data-key="${h(d.key)}" aria-pressed="${mySeats(d.key) === "General admission"}">${mySeats(d.key) === "General admission" ? "✓ " : ""}General admission</button>
         <div class="ww__hint">Friends going too will see where you’re sitting. No assigned seats? Tap General admission.</div></div>` : ""}
+      ${commentsBlock(d)}
       ${facts.length ? `<div class="sheet__section"><dl class="facts">${facts.map(([k, v]) => `<dt>${h(k)}</dt><dd>${h(v).replace(/\n/g, "<br>")}</dd>`).join("")}</dl></div>` : ""}
       <div class="sheet__section"><div class="group-label" style="margin-top:0">Follow</div><div class="actions">${followButtons(d.films)}</div></div>
       ${evs.length || d.first_listed ? `<div class="sheet__section">${wireEl()}<div class="group-label" style="margin-top:14px">History</div><ul class="timeline">
@@ -1141,6 +1143,29 @@ function friendsPlans() {
     .filter((r) => r.occ && r.occ.date >= today)
     .sort((a, b) => a.occ.date.localeCompare(b.occ.date) || toMin((a.occ.showtimes || [])[0]) - toMin((b.occ.showtimes || [])[0]));
 }
+/* The day after a night out: one quiet line to log it on Letterboxd. Plans are
+   remembered on this device, since past screenings drop out of the listings. */
+const readPlans = () => { try { return JSON.parse(localStorage.getItem("filament.plans") || "{}"); } catch { return {}; } };
+const writePlans = (p) => { try { localStorage.setItem("filament.plans", JSON.stringify(p)); } catch { /* this device only */ } };
+function rememberPlan(key, on) {
+  const p = readPlans(), d = findItem(key) || D().listings?.occurrences?.[key];
+  if (on && d) p[key] = { date: d.date, films: d.films.map((f) => ({ title: f.title, year: f.year || null })) };
+  else delete p[key];
+  const old = nyDate(new Date(Date.now() - 14 * 864e5));
+  for (const [k, v] of Object.entries(p)) if (v.date < old) delete p[k];
+  writePlans(p);
+}
+function logItPrompt() {
+  const today = todayISO(), from = nyDate(new Date(Date.now() - 3 * 864e5));
+  for (const [key, v] of Object.entries(readPlans())) {
+    if (v.done || v.date >= today || v.date < from) continue;
+    const f = v.films[0];
+    const rec = lookup(lbData(), f);
+    if (rec?.lw && rec.lw >= v.date) continue;                      // already logged on Letterboxd
+    return `<a class="fgoing-teaser logit" href="${h(letterboxdURL(f))}" target="_blank" rel="noopener" data-action="log-it" data-key="${h(key)}">${LB_MARK}<span>How was ${h(f.title)}? Log it on Letterboxd</span><span aria-hidden="true">›</span></a>`;
+  }
+  return "";
+}
 function friendsGoingBlock() {
   const until = nyDate(new Date(Date.now() + 7 * 864e5));
   const n = friendsPlans().filter((r) => r.others.length && r.occ.date <= until).length;
@@ -1164,6 +1189,7 @@ function viewFriends() {
   const joinOn = owner && D().friends?.join?.enabled !== false && D().friends?.join?.key;
   return `<div class="page">
     <header class="page-head"><div><h1 class="page-title">Friends</h1><p class="page-sub">Who’s going to what, and where they’re sitting</p></div></header>
+    ${pollsBlock()}
     <h2 class="settings-section">Your plans</h2>
     ${mine.length ? `<div class="fgoing">${mine.map((r) => planRow(r, `You${r.me.seats ? ` <span class="fgoing__seat">${h(r.me.seats)}</span>` : ""}${r.others.length ? ` · with ${names(r)}` : ""}`)).join("")}</div>`
       : `<p class="settings-lede">Tap <b>I’m going</b> on any screening. It shows here, and friends who see that screening will know. Add your seats once you’ve booked so they can sit nearby.</p>`}
@@ -1189,6 +1215,116 @@ function goingLine(key, short) {
   const names = [...(me ? [`You${seat(mine)}`] : []), ...list.filter((g) => g.id !== myGoingId()).map((g) => `${g.name}${seat(g)}`)];
   return names.length === 1 ? (me ? `You’re going${seat(mine)}` : `${names[0]} is going`) : `${names.slice(0, -1).join(", ")} and ${names.at(-1)} are going`;
 }
+/** Comments and "which night?" polls, shared by everyone in Filament (data/social.json).
+    The same rules run in the friends service and, for the owner, in the app. */
+function applySocial(doc, who, a, today) {
+  doc.comments = doc.comments || {};
+  doc.polls = doc.polls || [];
+  const KEY = /^[\w-]+@\d{4}-\d\d-\d\d$/;
+  const now = new Date().toISOString();
+  const rid = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+  const mayRemove = (x) => x.by === who.id || who.id === "owner";
+  if (a.type === "comment") {
+    const text = String(a.text || "").replace(/\s+/g, " ").trim().slice(0, 280);
+    if (!KEY.test(a.key || "") || !text) return "Write something first";
+    const list = doc.comments[a.key] || (doc.comments[a.key] = []);
+    if (list.length >= 200) return "This screening has a lot of comments already";
+    list.push({ id: rid(), by: who.id, name: who.name, at: now, text });
+  } else if (a.type === "uncomment") {
+    const list = doc.comments[a.key] || [];
+    const c = list.find((x) => x.id === a.id);
+    if (!c || !mayRemove(c)) return "Not yours to delete";
+    doc.comments[a.key] = list.filter((x) => x !== c);
+    if (!doc.comments[a.key].length) delete doc.comments[a.key];
+  } else if (a.type === "poll") {
+    const opts = [...new Set((a.options || []).filter((k) => KEY.test(k) && k.split("@")[1] >= today))].slice(0, 4);
+    const title = String(a.film?.title || "").trim().slice(0, 120);
+    if (opts.length < 2 || !title) return "A poll needs at least two upcoming nights";
+    if (doc.polls.some((p) => p.film.title === title && p.options.some((o) => opts.includes(o)))) return "There’s already a poll for this";
+    doc.polls.push({ id: rid(), by: who.id, name: who.name, at: now, film: { title, year: Number(a.film.year) || null }, options: opts, votes: {} });
+  } else if (a.type === "vote") {
+    const p = doc.polls.find((x) => x.id === a.poll);
+    if (!p || !p.options.includes(a.option)) return "That poll has ended";
+    const v = p.votes[a.option] || [];
+    p.votes[a.option] = v.some((x) => x.id === who.id) ? v.filter((x) => x.id !== who.id) : [...v, { id: who.id, name: who.name }];
+    if (!p.votes[a.option].length) delete p.votes[a.option];
+  } else if (a.type === "unpoll") {
+    const p = doc.polls.find((x) => x.id === a.poll);
+    if (!p || !mayRemove(p)) return "Not yours to remove";
+    doc.polls = doc.polls.filter((x) => x !== p);
+  } else return "Unknown action";
+  // Tidy: comments stay a week after the night; polls end when every night has passed.
+  const weekAgo = new Date(Date.parse(`${today}T12:00:00Z`) - 7 * 864e5).toISOString().slice(0, 10);
+  for (const k of Object.keys(doc.comments)) if (k.split("@")[1] < weekAgo) delete doc.comments[k];
+  doc.polls = doc.polls.filter((p) => p.options.some((o) => o.split("@")[1] >= today));
+  return null;
+}
+
+const socialDoc = () => D().social || { comments: {}, polls: [] };
+const myName = () => (isFriend() ? (state.src.name || "Friend").split(" ")[0] : (settings().owner_name || "Owner"));
+async function saveSocial(action) {
+  const who = { id: myGoingId(), name: myName() };
+  const draft = structuredClone(socialDoc());
+  const err = applySocial(draft, who, action, todayISO());
+  if (err) { toast(err); return false; }
+  const before = D().social;
+  state.data = { ...state.data, social: draft };
+  reopenSheet(); render();
+  try {
+    if (isFriend()) state.data = { ...state.data, social: await state.src.social(action) };
+    else if (!isLocal()) {
+      const fresh = (await state.src.readFile("social.json")) || { comments: {}, polls: [] };
+      const e2 = applySocial(fresh, who, action, todayISO());
+      if (!e2) await state.src.writeFile("social.json", fresh, `${who.name}: ${action.type}`);
+      state.data = { ...state.data, social: fresh };
+    }
+    reopenSheet(); render();
+    return true;
+  } catch (e) {
+    state.data = { ...state.data, social: before };
+    reopenSheet(); render();
+    toast(`Couldn’t save: ${e.message}`); return false;
+  }
+}
+const sameFilm = (a, b) => titleKey(a.title) === titleKey(b.title) && (!a.year || !b.year || Math.abs(a.year - b.year) <= 1);
+/** Other upcoming nights for the same film, for "which night?". */
+function nightsFor(d) {
+  if (d.films.length !== 1) return [];
+  const f = d.films[0], today = todayISO();
+  return Object.values(D().listings?.occurrences || {})
+    .filter((o) => o.date >= today && (o.status || "active") === "active" && o.films.length === 1 && sameFilm(o.films[0], f))
+    .sort((a, b) => a.date.localeCompare(b.date) || toMin((a.showtimes || [])[0]) - toMin((b.showtimes || [])[0]));
+}
+const pollFor = (key) => socialDoc().polls.find((p) => p.options.includes(key));
+const shortWhen = (date) => (date === todayISO() ? "Tonight" : daysFrom(date) === 1 ? "Tomorrow" : fmtDay(date, { weekday: "short", month: "short", day: "numeric" }));
+// Friends get comments once the friends service knows about them (social.json readable).
+const socialReady = () => !isFriend() || !!D().social;
+function commentsBlock(d) {
+  if (!socialReady()) return "";
+  const list = socialDoc().comments[d.key] || [];
+  const nights = nightsFor(d), poll = pollFor(d.key);
+  const ago = (ts) => { const m = Math.round((Date.now() - new Date(ts)) / 6e4); return m < 1 ? "now" : m < 60 ? `${m}m` : m < 1440 ? `${Math.round(m / 60)}h` : `${Math.round(m / 1440)}d`; };
+  return `<div class="sheet__section talk">
+    <div class="group-label" style="margin-top:0">Comments</div>
+    ${list.length ? `<ul class="talk__list">${list.map((c) => `<li><b>${h(c.by === myGoingId() ? "You" : c.name)}</b> ${h(c.text)} <span class="talk__ago">${ago(c.at)}</span>${c.by === myGoingId() || !isFriend() ? `<button class="talk__x" data-action="uncomment" data-key="${h(d.key)}" data-id="${h(c.id)}" aria-label="Delete comment">${ICON.close}</button>` : ""}</li>`).join("")}</ul>` : ""}
+    <form class="talk__form" data-key="${h(d.key)}"><input name="text" maxlength="280" placeholder="${list.length ? "Add a comment" : "Say something to friends"}" autocomplete="off" aria-label="Comment"><button class="btn btn--sm">Post</button></form>
+    ${poll ? `<button class="linkish talk__poll" data-action="nav" data-view="friends">${h(poll.by === myGoingId() ? "You" : poll.name)} asked which night works ›</button>`
+      : nights.length >= 2 ? `<button class="linkish talk__poll" data-action="poll-new" data-key="${h(d.key)}">Not sure which night? Ask friends</button>` : ""}
+  </div>`;
+}
+function pollsBlock() {
+  if (!socialReady()) return "";
+  const today = todayISO(), occs = D().listings?.occurrences || {};
+  const polls = socialDoc().polls.filter((p) => p.options.some((o) => o.split("@")[1] >= today));
+  if (!polls.length) return "";
+  return `<h2 class="settings-section">Which night?</h2>${polls.map((p) => `<div class="poll">
+    <div class="poll__head"><b>${h(p.film.title)}</b><span>${h(p.by === myGoingId() ? "You asked" : `${p.name} asked`)}</span>${p.by === myGoingId() || !isFriend() ? `<button class="talk__x" data-action="unpoll" data-id="${h(p.id)}" aria-label="Remove poll">${ICON.close}</button>` : ""}</div>
+    ${p.options.filter((k) => occs[k] && occs[k].date >= today).map((k) => { const o = occs[k], v = p.votes[k] || [], mine = v.some((x) => x.id === myGoingId());
+      return `<div class="poll__opt"><button class="poll__when" data-action="open" data-key="${h(k)}"><b>${h(shortWhen(o.date))}${o.showtimes?.[0] ? ` · ${h(o.showtimes[0])}` : ""}</b><span>${h(o.venue)}${v.length ? ` · ${h(v.map((x) => (x.id === myGoingId() ? "you" : x.name)).join(", "))}` : ""}</span></button>
+        <button class="poll__vote" data-action="vote" data-id="${h(p.id)}" data-key="${h(k)}" aria-pressed="${mine}">${mine ? "✓ Works" : "Works for me"}</button></div>`; }).join("")}
+  </div>`).join("")}`;
+}
+
 async function saveGoing(key, on, seats = "") {
   const name = isFriend() ? (state.src.name || "Friend").split(" ")[0] : (settings().owner_name || "Owner");
   const clean = String(seats || "").replace(/[^\w\s,–-]/g, "").trim().slice(0, 24);
@@ -1201,6 +1337,7 @@ async function saveGoing(key, on, seats = "") {
     return doc;
   };
   state.data = { ...state.data, going: apply(structuredClone(D().going || { going: {} })) };
+  rememberPlan(key, on);
   reopenSheet(); render();
   try {
     if (isFriend()) await state.src.setGoing(key, on, clean);
@@ -1436,6 +1573,13 @@ async function connectLetterboxd(raw) {
   } catch (e) { Object.assign(state, { lbBusy: false, lbError: e.message }); render(); }
 }
 document.addEventListener("submit", async (ev) => {
+  const tf = ev.target.closest?.(".talk__form");
+  if (tf) {
+    ev.preventDefault();
+    const text = String(new FormData(tf).get("text") || "").trim();
+    if (text) await saveSocial({ type: "comment", key: tf.dataset.key, text });
+    return;
+  }
   const sf = ev.target.closest?.(".seats-form");
   if (sf) {
     ev.preventDefault();
@@ -2100,7 +2244,7 @@ function gotALight() {
   if (reducedMotion()) { subtitle("Got a light?"); return; }
   document.body.classList.add("woodsman");
   overlay("grain", "", 7000);
-  try { const v = new Audio("got-a-light.m4a?v=20261110150851"); v.volume = 0.9; v.play().catch(() => radioStatic(5)); } catch { radioStatic(5); }
+  try { const v = new Audio("got-a-light.m4a?v=20261110152124"); v.volume = 0.9; v.play().catch(() => radioStatic(5)); } catch { radioStatic(5); }
   setTimeout(() => subtitle("Got a light?"), 150);         // the line comes in the first second of the clip
   setTimeout(() => document.body.classList.remove("woodsman"), 7200);
 }
@@ -2455,6 +2599,12 @@ async function onAction(el, ev) {
   if (a === "days") return saveFilters((f) => { f.days = el.dataset.v; }, "Saved");
   if (a === "venues") return openVenueSheet();
   if (a === "filter-open") return openFilterSheet();
+  if (a === "uncomment") return saveSocial({ type: "uncomment", key: el.dataset.key, id: el.dataset.id });
+  if (a === "unpoll") return saveSocial({ type: "unpoll", poll: el.dataset.id });
+  if (a === "vote") return saveSocial({ type: "vote", poll: el.dataset.id, option: el.dataset.key });
+  if (a === "poll-new") { const d = findItem(el.dataset.key) || D().listings?.occurrences?.[el.dataset.key]; const n = nightsFor(d).slice(0, 4);
+    if (await saveSocial({ type: "poll", film: { title: d.films[0].title, year: d.films[0].year }, options: n.map((o) => o.key) })) toast("Asked. Friends can vote in the Friends tab."); return; }
+  if (a === "log-it") { const p = readPlans(); if (p[el.dataset.key]) { p[el.dataset.key].done = true; writePlans(p); } setTimeout(render, 300); return; }
   if (a === "filt") { const k = el.dataset.k, v = el.dataset.v; filt[k] = filt[k].includes(v) ? filt[k].filter((x) => x !== v) : [...filt[k], v]; return filterChanged(); }
   if (a === "filt-from") { filt.from = el.dataset.v; return filterChanged(); }
   if (a === "filt-reset") { filt = { ...FILTER0 }; return filterChanged(); }
@@ -2632,7 +2782,7 @@ function bindWelcome() {
 applyTheme();
 // Instant launch & offline: cache the app itself (never your data).
 if ("serviceWorker" in navigator && !isLocal()) {
-  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261110150851").catch(() => {}));
+  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261110152124").catch(() => {}));
 }
 // Friend invite links: #invite=<key>&api=<friends service> (the fragment never reaches any server).
 (function acceptInvite() {

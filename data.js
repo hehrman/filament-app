@@ -12,7 +12,7 @@ const CFG_KEY = "filament.connection.v1";
 const CACHE_KEY = "filament.cache.v1";
 // The friends service (sign-up, sign-in links, feedback). Not personal data — just where the service lives.
 export const FRIENDS_API = "https://friends.filament-nyc.com";
-const FILES = ["settings.json", "status.json", "history.json", "listings.json", "catalog.json", "letterboxd.json", "people.json", "going.json"];
+const FILES = ["settings.json", "status.json", "history.json", "listings.json", "catalog.json", "letterboxd.json", "people.json", "going.json", "social.json"];
 
 const safe = {
   get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
@@ -162,6 +162,7 @@ class FriendSource {
     if (!res.ok) throw new ApiError(j.message || `Filament said ${res.status}`, res.status);
     return j;
   }
+  async social(action) { return (await this.call("/api/social", { method: "POST", body: JSON.stringify(action) })).social; }
   async setGoing(key, on, seats) { return this.call("/api/going", { method: "POST", body: JSON.stringify({ key, on, seats }) }); }
   async verify() { const r = await this.call("/api/whoami"); this.name = r.name; this.id = r.id; this.owner = r.owner || ""; this.label = `${r.name}’s Filament`; return r; }
   async readFile(name) { return (await this.call(`/api/file?name=${encodeURIComponent(name)}`)).content; }
