@@ -1,12 +1,12 @@
-import { creditIsDirector, fold, matchFilm, matchOccurrence, titleKey } from "./match.js?v=20261110045351";
+import { creditIsDirector, fold, matchFilm, matchOccurrence, titleKey } from "./match.js?v=20261110045400";
 import {
   ApiError, FRIENDS_API, cached, emailSignIn, forgetConnection, isLocal, joinFilament, joinInfo, letterboxdFeed, loadAll, loadConnection,
   makeSource, mutateSettings, saveConnection,
-} from "./data.js?v=20261110045351";
-import { followList, forYou, importExport, lookup, lovedDirectors, mergeFeed, recentlyWatched, stars } from "./letterboxd.js?v=20261110045351";
+} from "./data.js?v=20261110045400";
+import { followList, forYou, importExport, lookup, lovedDirectors, mergeFeed, recentlyWatched, stars } from "./letterboxd.js?v=20261110045400";
 import {
   filmographyFor, searchCatalog, searchWikidataDirectors, searchWikidataFilms, slugFromCatalog,
-} from "./search.js?v=20261110045351";
+} from "./search.js?v=20261110045400";
 
 const TZ = "America/New_York";
 const app = document.getElementById("app");
@@ -1704,7 +1704,7 @@ const WHATS_NEW = { id: "2026-11-friends-3", items: [
   ["Friends, together", "See which screenings your friends are going to. Tap “I’m going” to join them, share your seats so you sit together, and get a heads-up when a friend is going to something you love. It all lives in the new Friends tab."],
   ["For you", "Picks that know your taste, learned from your Letterboxd ratings. Each one tells you exactly why."],
   ["Letterboxd in one step", "Just your username, and every film you’ve rated ★★★★½ or higher is followed for you."],
-  ["Every film they made", "Tap a director you follow for their whole filmography, with anything playing in New York right at the top."],
+  ["Plan the night in one tap", "Tap a showtime and it’s in your calendar. Tap the theater for directions. Alamo, Metrograph and Nitehawk open straight to their seat maps."],
   ["Something’s hiding", "A few directors are tucked away in here. Start with About & Help → Three things to try."],
 ] };
 function maybeWhatsNew() {
@@ -2436,7 +2436,7 @@ function bindWelcome() {
 applyTheme();
 // Instant launch & offline: cache the app itself (never your data).
 if ("serviceWorker" in navigator && !isLocal()) {
-  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261110045351").catch(() => {}));
+  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261110045400").catch(() => {}));
 }
 // Friend invite links: #invite=<key>&api=<friends service> (the fragment never reaches any server).
 (function acceptInvite() {
