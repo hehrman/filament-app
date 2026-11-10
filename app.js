@@ -1,12 +1,12 @@
-import { creditIsDirector, fold, matchFilm, matchOccurrence, titleKey } from "./match.js?v=20261110041039";
+import { creditIsDirector, fold, matchFilm, matchOccurrence, titleKey } from "./match.js?v=20261110042037";
 import {
   ApiError, FRIENDS_API, cached, emailSignIn, forgetConnection, isLocal, joinFilament, joinInfo, letterboxdFeed, loadAll, loadConnection,
   makeSource, mutateSettings, saveConnection,
-} from "./data.js?v=20261110041039";
-import { followList, forYou, importExport, lookup, lovedDirectors, mergeFeed, recentlyWatched, stars } from "./letterboxd.js?v=20261110041039";
+} from "./data.js?v=20261110042037";
+import { followList, forYou, importExport, lookup, lovedDirectors, mergeFeed, recentlyWatched, stars } from "./letterboxd.js?v=20261110042037";
 import {
   filmographyFor, searchCatalog, searchWikidataDirectors, searchWikidataFilms, slugFromCatalog,
-} from "./search.js?v=20261110041039";
+} from "./search.js?v=20261110042037";
 
 const TZ = "America/New_York";
 const app = document.getElementById("app");
@@ -943,6 +943,13 @@ const EVENT_TEXT = {
 };
 // Theaters with assigned seats: the ticket page is where you see the live seat map.
 const ticketLabel = (d) => /drafthouse\.com|metrograph\.com|nitehawkcinema\.com/.test(d.ticket_url || "") ? "See seats & tickets" : "Tickets";
+// Theaters with more than one building (Film at Lincoln Center): list each, honestly.
+// A room with a "season" (MM-DD/MM-DD) only shows when the screening falls inside it.
+function roomsFor(d) {
+  const rooms = venueInfo(d)?.rooms || [];
+  const md = d.date.slice(5);
+  return rooms.filter((r) => { if (!r.season) return true; const [a, b] = r.season.split("/"); return md >= a && md <= b; });
+}
 const venueInfo = (d) => D().catalog?.venues?.[d.venue_slug] || null;
 function openSheet(key) {
   const d = findItem(key);
@@ -983,7 +990,10 @@ function openSheet(key) {
         <div class="ww__when"><b>${h(rel || fmtDay(d.date, { weekday: "long" }))}</b> <span>${h(fmtDay(d.date, rel ? { weekday: "long", month: "long", day: "numeric" } : { month: "long", day: "numeric", year: "numeric" }))}</span></div>
         <div class="ww__times">${(d.showtimes?.length ? d.showtimes : [null]).map((t) => `<button class="time time--btn" data-action="ics" data-key="${h(d.key)}" data-time="${h(t || "")}" aria-label="Add ${h(t || "this screening")} to your calendar">${h(t || "Time TBA")} ${ICON.calendar}</button>`).join("")}</div>
         <div class="ww__hint">Tap a time to add it to your calendar</div>
-        <a class="ww__venue" href="${h(maps)}" target="_blank" rel="noopener"><span class="ww__vname">${h(d.venue)}</span>${addr ? `<span class="ww__addr">${h(addr)}</span>` : ""}<span class="ww__dir">Directions ›</span></a>
+        ${roomsFor(d).length ? `<div class="ww__venue ww__venue--rooms"><span class="ww__vname">${h(d.venue)}</span>
+          ${roomsFor(d).map((r) => `<a class="ww__room" href="https://maps.apple.com/?q=${encodeURIComponent(`${r.name}, ${r.address}`)}" target="_blank" rel="noopener"><b>${h(r.name)}</b><span>${h(r.address)}</span><span class="ww__dir">Directions ›</span></a>`).join("")}
+          <span class="ww__hint">Your ticket says which room.</span></div>`
+        : `<a class="ww__venue" href="${h(maps)}" target="_blank" rel="noopener"><span class="ww__vname">${h(d.venue)}</span>${addr ? `<span class="ww__addr">${h(addr)}</span>` : ""}<span class="ww__dir">Directions ›</span></a>`}
       </div>
       <div class="sheet__section"><div class="actions">
         ${d.ticket_url ? `<a class="btn btn--brass" href="${h(d.ticket_url)}" target="_blank" rel="noopener">${ticketLabel(d)}</a>` : ""}
@@ -2365,7 +2375,7 @@ function bindWelcome() {
 applyTheme();
 // Instant launch & offline: cache the app itself (never your data).
 if ("serviceWorker" in navigator && !isLocal()) {
-  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261110041039").catch(() => {}));
+  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261110042037").catch(() => {}));
 }
 // Friend invite links: #invite=<key>&api=<friends service> (the fragment never reaches any server).
 (function acceptInvite() {

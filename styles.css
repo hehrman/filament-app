@@ -1050,3 +1050,9 @@ body { overscroll-behavior-y: contain; }
 .status-line .lamp { width: 20px; height: 20px; flex: none; }
 .status-line .console__headline { font: 600 14px/1.3 var(--font); color: var(--text); }
 .status-line__meta { color: var(--text-2); }
+
+.ww__venue--rooms { gap: 8px; }
+.ww__room { display: grid; gap: 1px; padding: 10px 0 2px; border-top: 1px solid var(--line); color: var(--text); text-decoration: none; }
+.ww__room b { font-weight: 600; font-size: 15.5px; }
+.ww__room span { color: var(--text-2); font-size: 14px; }
+.ww__room .ww__dir { color: var(--brass-hi); }
