@@ -1,12 +1,12 @@
-import { creditIsDirector, fold, matchFilm, matchOccurrence, titleKey } from "./match.js?v=20261110145233";
+import { creditIsDirector, fold, matchFilm, matchOccurrence, titleKey } from "./match.js?v=20261110150851";
 import {
   ApiError, FRIENDS_API, cached, emailSignIn, forgetConnection, isLocal, joinFilament, joinInfo, letterboxdFeed, loadAll, loadConnection,
   makeSource, mutateSettings, saveConnection,
-} from "./data.js?v=20261110145233";
-import { followList, forYou, importExport, lookup, lovedDirectors, mergeFeed, recentlyWatched, stars } from "./letterboxd.js?v=20261110145233";
+} from "./data.js?v=20261110150851";
+import { followList, forYou, importExport, lookup, lovedDirectors, mergeFeed, recentlyWatched, stars } from "./letterboxd.js?v=20261110150851";
 import {
   filmographyFor, searchCatalog, searchWikidataDirectors, searchWikidataFilms, slugFromCatalog,
-} from "./search.js?v=20261110145233";
+} from "./search.js?v=20261110150851";
 
 const TZ = "America/New_York";
 const app = document.getElementById("app");
@@ -14,8 +14,7 @@ const sheetRoot = document.getElementById("sheet-root");
 const toastRoot = document.getElementById("toast-root");
 
 const state = {
-  src: null, data: null, view: "upcoming", watchTab: "directors", archiveFilter: "upcoming",
-  archiveQuery: "", running: false, loading: true, error: null, results: null, query: "",
+  src: null, data: null, view: "upcoming", watchTab: "directors", running: false, loading: true, error: null, results: null, query: "",
   searching: false, busy: false, find: "", when: "all",
 };
 
@@ -55,7 +54,6 @@ const directorsOf = (f) => (f.directors || []).map((d) => d.name).join(", ");
 const ICON = {
   upcoming: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="10" r="6"/><path d="M9 11l1.5-2.5L12 11l1.5-2.5L15 11"/><path d="M10 16v3h4v-3"/><path d="M10.5 21h3"/></svg>`,
   watch: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="5" cy="7" r="1.6"/><circle cx="5" cy="12" r="1.6"/><circle cx="5" cy="17" r="1.6"/><path d="M10 7h10M10 12h10M10 17h7"/></svg>`,
-  archive: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><rect x="3.5" y="4" width="17" height="16" rx="1.5"/><path d="M3.5 12h17"/><path d="M10 8h4M10 16h4" stroke-linecap="round"/></svg>`,
   settings: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/><circle cx="9" cy="7" r="2" fill="var(--bg)"/><circle cx="15" cy="12" r="2" fill="var(--bg)"/><circle cx="7" cy="17" r="2" fill="var(--bg)"/></svg>`,
   filter: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h16M7 12h10M10 17h4"/></svg>`,
   search: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>`,
@@ -833,14 +831,14 @@ const FAQ = [
   ["Where do the listings come from?", "From Screen Slate, the independent daily guide to New York’s film screenings. Filament reads its public New York listings once a day and links back to them. That covers repertory houses, museums and arthouse cinemas like Film Forum, Metrograph, BAM, IFC, Anthology, Film at Lincoln Center, MoMA and Alamo, though not every multiplex."],
   ["How often does it check?", "Every morning at 9:00 AM New York time, in the cloud. Your phone and computer can be off."],
   ["How far ahead does it look?", "As far as the listings go. It reads every published date, so it reaches further on its own when theaters announce further ahead."],
-  ["What does following a director do?", "Every screening of every film they directed, including ones you didn’t know about, shows up in Upcoming and in your alerts. Follow a single film instead if you only care about that one."],
+  ["What does following a director do?", "Every screening of every film they directed, including ones you didn’t know about, shows up in Upcoming right away, and you’re told whenever a new one is scheduled. Follow a single film instead if you only care about that one."],
   ["How does it know a film is by a director I follow?", "Listings link each director to a permanent ID, so matching never depends on spelling. Single films are matched by title and confirmed by year or director, so a remake with the same name won’t set it off."],
   ["How does Letterboxd work here?", "Connect with just your username in Following → Letterboxd. Films you rated 4.5★ or higher are followed automatically, anything you’ve logged is marked “Seen,” and new ratings are picked up each morning. For your full history and watchlist, import your Letterboxd export from the same page."],
   ["How are “For you” picks chosen?", "From your Letterboxd ratings. Filament learns which directors, writers, cinematographers, genres and eras you rate above your own average, so a tough rater’s 4★ counts for more. It checks everything playing in New York against that, says why for every pick, and leaves out films you’ve seen."],
   ["Why isn’t a favorite showing up?", "If you watched it in the last 4 months, Filament assumes you don’t need a reminder yet. You can change that in Following → Letterboxd. It may also simply not be playing in New York right now. Try “Is it playing?” at the top of Upcoming."],
   ["How does Friends work?", "Tap “I’m going” on any screening. Friends who see that screening will know, and you can add your seats (or General admission) so you sit together. The Friends tab shows your plans and theirs, and you get a heads-up when a friend is going to something you follow."],
   ["Who can see what I’m going to?", "Only people in your Filament, and only your first name and seats. Nobody sees what you follow, your Letterboxd or your email."],
-  ["What will I be told about?", "New screenings of what you follow, moved dates and changed showtimes, cancellations, a “last chance” reminder before a film’s final screening, and friends going to something you follow. Each piece of news only once. Settings → Alerts lets you choose, and narrow alerts to, say, 35mm prints or certain theaters."],
+  ["What will I be told about?", "Only news. Anything already scheduled when you follow something shows up in Upcoming right away instead. After that: new screenings of what you follow, moved dates and changed showtimes, cancellations, a “last chance” reminder before a film’s final screening, and friends going to something you follow. Each piece of news only once. Settings → Alerts lets you choose, and narrow alerts to, say, 35mm prints or certain theaters."],
   ["Emails or notifications?", "Either or both, in Settings → Alerts. Emails group everything new into one message, plus a Sunday “Playing this week” digest. Notifications put the same news on your lock screen."],
   ["Can I buy tickets here?", "Filament takes you straight to each theater’s own ticket page. For Alamo, Metrograph and Nitehawk that’s the live seat map, so you can pick your seats there."],
   ["What gets stored about me?", "Only what Filament needs: your first name and email, what you follow, your settings and plans, and from Letterboxd just titles, years, ratings, watch dates and your watchlist. It’s private, never shared or sold, and there’s no password to leak."],
@@ -863,7 +861,7 @@ function eggShowcase() {
     <p class="group-foot">There are more. Think Lynch, Fellini, Godard, Wong Kar-wai…</p>`;
 }
 function viewHelp() {
-  const steps = [["01", "Follow", "Add directors and films you love, or import your Letterboxd."], ["02", "Filament watches", "Every morning it reads New York’s screening listings, as far ahead as they go."], ["03", "You hear first", "An email or notification the moment something you follow is scheduled, and only once."]];
+  const steps = [["01", "Follow", "Add directors and films you love, or import your Letterboxd."], ["02", "Filament watches", "Every morning it reads New York’s screening listings, as far ahead as they go."], ["03", "You hear first", "An email or notification the moment something you follow is scheduled, and only once."], ["04", "Go together", "Tap “I’m going” and friends see it. Add your seats so you can sit together."]];
   return `<div class="page">
     <header class="page-head"><div><h1 class="page-title">How Filament works</h1></div>
       <button class="btn btn--sm" data-action="help-done">Done</button></header>
@@ -884,7 +882,7 @@ const featuresList = () => {
   return `<ol class="features">
       ${feat("01", "Tell it what you love", "A director (every film David Lynch made), a single title, or your whole Letterboxd.")}
       ${feat("02", "Get told the moment it’s playing", "A notification on your phone or an email as soon as a New York theater schedules it. Changes, cancellations and last chances too. Never the same news twice.")}
-      ${feat("03", "See everything at a glance", "Every upcoming screening of what you follow, plus a search of everything playing in the city.")}
+      ${feat("03", "Go together", "See which friends are going, tap “I’m going” yourself, and add your seats so you can sit together.")}
     </ol>`;
 };
 
@@ -895,7 +893,6 @@ function welcome(errMsg) {
   const ownerOpen = !!(errMsg || state.busy || c.owner || new URLSearchParams(location.search).has("owner"));
   return `<div class="welcome"><div class="welcome__card">
     ${tubesArt()}
-    <div class="eyebrow">Filament · New York</div>
     <h1>Know the moment your favorite films play in New York.</h1>
     <p class="welcome__lede">Tell Filament the directors and films you love. When a New York theater schedules one, you get a notification or an email, right away, and only once.</p>
     ${featuresList()}
@@ -936,7 +933,6 @@ function joinScreen() {
   const from = j.info?.from;
   return `<div class="welcome"><div class="welcome__card">
     ${tubesArt()}
-    <div class="eyebrow">Filament · New York</div>
     <h1>Know the moment your favorite films play in New York.</h1>
     <p class="welcome__lede">${from ? `${h(from)} invited you to Filament.` : "You’re invited to Filament."} Tell it the directors and films you love. When a New York theater schedules one, you’ll get a notification or an email right away.</p>
     ${featuresList()}
@@ -1236,7 +1232,7 @@ function askCheck() {
   sheetRoot.innerHTML = `<div class="scrim" data-action="close-sheet"></div>
     <div class="sheet sheet--small" role="dialog" aria-modal="true" aria-labelledby="ck-title"><div class="sheet__grab"></div>
       <div class="sheet__hero"><button class="icon-btn sheet__close" data-action="close-sheet" aria-label="Close">${ICON.close}</button>
-        <div class="eyebrow">Check now</div><h2 class="sheet__title" id="ck-title">${state.running ? "A check is running" : "Look for new screenings now?"}</h2>
+        <h2 class="sheet__title" id="ck-title">${state.running ? "A check is running" : "Look for new screenings now?"}</h2>
         <p class="page-sub">${state.running ? "Filament is reading every New York listing, which takes about three minutes. Anything new shows up here and in your alerts."
           : `You don’t need to. Filament checks by itself every morning at ${h(t)}. An extra check reads every New York listing again (about three minutes), and anything new is sent to you as usual.`}</p></div>
       <div class="sheet__section"><div class="actions">${state.running ? `<button class="btn" data-action="close-sheet">OK</button>`
@@ -1487,10 +1483,10 @@ function setupCard() {
       ? `<div class="setup__d">Get a notification the moment something you follow is scheduled. Email alerts are already on.</div><button class="btn btn--sm btn--brass" data-action="push-on">Turn on notifications</button>`
       : `<div class="setup__d">Email alerts are on. For phone notifications, open Filament on your iPhone and add it to your Home Screen.</div>`;
   return `<section class="setup" aria-label="Get set up">
-    <div class="setup__head"><div><div class="eyebrow">Get set up</div><div class="setup__count">${done} of 3 done</div></div>
+    <div class="setup__head"><div><h2 class="section-title">Get set up</h2><div class="setup__count">${done} of 3 done</div></div>
       <button class="icon-btn" data-action="setup-hide" aria-label="Hide setup">${ICON.close}</button></div>
     <ol class="setup__steps">
-      ${step(follow, 1, "Follow a director or film", `<div class="setup__d">You’ll be told whenever one is scheduled in New York.${picks.length ? " Playing this month. Tap to follow:" : ""}</div>
+      ${step(follow, 1, "Follow a director or film", `<div class="setup__d">What’s already scheduled shows up here right away, and you’re told about anything new.${picks.length ? " Playing this month. Tap to follow:" : ""}</div>
         ${picks.length ? `<div class="setup__picks">${picks.map((d) => `<button class="chip chip--btn" data-action="follow-dir" data-name="${h(d.name)}" data-tmdb="${h(d.tmdb || "")}" data-slug="${h(d.slug || "")}">+ ${h(d.name)}</button>`).join("")}</div>` : ""}
         <button class="btn btn--sm" data-action="nav" data-view="watch">Search for anyone</button>`)}
       ${step(lb, 2, "Connect Letterboxd", `<div class="setup__d">Follows every film you’ve rated highly, and powers suggestions. Just your username.</div>${lbConnectForm(true)}`)}
@@ -1582,7 +1578,7 @@ function showLinkSheet(title, sub, link) {
   sheetRoot.innerHTML = `<div class="scrim" data-action="close-sheet"></div>
     <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="ls-title"><div class="sheet__grab"></div>
       <div class="sheet__hero"><button class="icon-btn sheet__close" data-action="close-sheet" aria-label="Close">${ICON.close}</button>
-        <div class="eyebrow">Friends</div><h2 class="sheet__title" id="ls-title">${h(title)}</h2><p class="page-sub">${h(sub)}</p></div>
+        <h2 class="sheet__title" id="ls-title">${h(title)}</h2><p class="page-sub">${h(sub)}</p></div>
       <div class="sheet__section"><div class="keybox"><code id="invite-link">${h(link)}</code></div></div></div>`;
   dragToDismiss(sheetRoot.querySelector(".sheet"));
 }
@@ -1600,7 +1596,7 @@ function openFeedback() {
   sheetRoot.innerHTML = `<div class="scrim" data-action="close-sheet"></div>
     <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="fb-title"><div class="sheet__grab"></div>
       <div class="sheet__hero"><button class="icon-btn sheet__close" data-action="close-sheet" aria-label="Close">${ICON.close}</button>
-        <div class="eyebrow">Feedback</div><h2 class="sheet__title" id="fb-title">Tell ${h(who.split(" ")[0])}</h2>
+        <h2 class="sheet__title" id="fb-title">Tell ${h(who.split(" ")[0])}</h2>
         <p class="page-sub">Bugs, ideas, questions. Anything. Replies come to your email.</p></div>
       <div class="sheet__section"><form id="fb-form">
         <div class="seg fb-kinds" role="radiogroup" aria-label="Kind">${FB_KINDS.map(([k, l], i) => `<button type="button" data-action="fb-kind" data-v="${k}" role="radio" aria-pressed="${i === 0}" aria-checked="${i === 0}">${l}</button>`).join("")}</div>
@@ -1740,8 +1736,8 @@ async function pushSetup() {
   const secretsURL = c ? `https://github.com/${c.owner}/${c.repo}/settings/secrets/actions/new` : "https://github.com";
   sheetRoot.innerHTML = `<div class="scrim"></div>
     <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="pk-title"><div class="sheet__grab"></div>
-      <div class="sheet__hero"><div class="eyebrow">Phone notifications · step 1 of 2</div><h2 class="sheet__title" id="pk-title">Save this key in GitHub</h2>
-        <p class="page-sub">It lets the daily check sign notifications. It’s shown only once and never leaves this device except to GitHub.</p></div>
+      <div class="sheet__hero"><h2 class="sheet__title" id="pk-title">Save this key in GitHub</h2>
+        <p class="page-sub">Step 1 of 2. It lets the daily check sign notifications. It’s shown only once and never leaves this device except to GitHub.</p></div>
       <div class="sheet__section">
         <div class="keybox"><code id="pk">${h(priv)}</code></div>
         <div class="actions" style="margin-top:12px"><button class="btn btn--brass" data-action="pk-copy">Copy key</button>
@@ -2104,7 +2100,7 @@ function gotALight() {
   if (reducedMotion()) { subtitle("Got a light?"); return; }
   document.body.classList.add("woodsman");
   overlay("grain", "", 7000);
-  try { const v = new Audio("got-a-light.m4a?v=20261110145233"); v.volume = 0.9; v.play().catch(() => radioStatic(5)); } catch { radioStatic(5); }
+  try { const v = new Audio("got-a-light.m4a?v=20261110150851"); v.volume = 0.9; v.play().catch(() => radioStatic(5)); } catch { radioStatic(5); }
   setTimeout(() => subtitle("Got a light?"), 150);         // the line comes in the first second of the clip
   setTimeout(() => document.body.classList.remove("woodsman"), 7200);
 }
@@ -2636,7 +2632,7 @@ function bindWelcome() {
 applyTheme();
 // Instant launch & offline: cache the app itself (never your data).
 if ("serviceWorker" in navigator && !isLocal()) {
-  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261110145233").catch(() => {}));
+  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261110150851").catch(() => {}));
 }
 // Friend invite links: #invite=<key>&api=<friends service> (the fragment never reaches any server).
 (function acceptInvite() {

@@ -1,7 +1,6 @@
-# Filament app
+# Filament
 
-The interface for Filament, a personal monitor for Screen Slate's NYC screening calendar.
+Know the moment the films and directors you love are playing in New York.
 
-This repository contains only the app's code and design; it holds no personal data.
-The app reads and saves data in a separate private repository, using an access token
-that is stored only on the user's own devices.
+This repository holds only the app's code and design. It contains no personal
+data. Listings come from Screen Slate's public New York calendar.
