@@ -1,12 +1,12 @@
-import { creditIsDirector, fold, matchFilm, matchOccurrence, titleKey } from "./match.js?v=20261110032648";
+import { creditIsDirector, fold, matchFilm, matchOccurrence, titleKey } from "./match.js?v=20261110032910";
 import {
   ApiError, FRIENDS_API, cached, emailSignIn, forgetConnection, isLocal, joinFilament, joinInfo, letterboxdFeed, loadAll, loadConnection,
   makeSource, mutateSettings, saveConnection,
-} from "./data.js?v=20261110032648";
-import { followList, forYou, importExport, lookup, lovedDirectors, mergeFeed, recentlyWatched, stars } from "./letterboxd.js?v=20261110032648";
+} from "./data.js?v=20261110032910";
+import { followList, forYou, importExport, lookup, lovedDirectors, mergeFeed, recentlyWatched, stars } from "./letterboxd.js?v=20261110032910";
 import {
   filmographyFor, searchCatalog, searchWikidataDirectors, searchWikidataFilms, slugFromCatalog,
-} from "./search.js?v=20261110032648";
+} from "./search.js?v=20261110032910";
 
 const TZ = "America/New_York";
 const app = document.getElementById("app");
@@ -563,7 +563,8 @@ function viewWatchlist() {
             <label class="switch" title="Monitoring on/off"><input type="checkbox" data-action="toggle" data-kind="directors" data-id="${h(d.id)}" ${d.enabled === false ? "" : "checked"} aria-label="Monitor ${h(d.name)}"><span></span></label>
             <button class="icon-btn" data-action="remove" data-kind="directors" data-id="${h(d.id)}" aria-label="Remove ${h(d.name)}">${ICON.trash}</button>
           </div>
-          ${fg.length ? `<div class="filmography">${fg.slice(0, 10).map(chip).join("")}</div>${fg.length > 10 ? `<details class="more"><summary>Show all ${fg.length} films</summary><div class="filmography">${fg.slice(10).map(chip).join("")}</div></details>` : ""}` : ""}
+          ${fg.length ? `<div class="filmography">${(fg.length <= 12 || state.expanded?.[d.id] ? fg : fg.slice(0, 8)).map(chip).join("")}</div>
+            <div class="actions" style="margin-top:10px">${fg.length > 12 && !state.expanded?.[d.id] ? `<button class="btn btn--sm btn--ghost" data-action="fg-more" data-id="${h(d.id)}">Show more</button>` : ""}<button class="btn btn--sm btn--ghost" data-action="dir-open" data-id="${h(d.id)}">All films & what’s playing ›</button></div>` : ""}
         </article></div>`;
       }).join("") : `<div class="empty"><h3>No directors yet</h3><p>Search above to follow a director’s entire filmography.</p></div>`)
     : (s.films.length ? `<div class="group">${s.films.map((f) => {
@@ -967,6 +968,26 @@ function openSheet(key) {
     </div>`;
   sheetRoot.querySelector(".sheet__close").focus();
   sheetRoot.dataset.key = key;
+  dragToDismiss(sheetRoot.querySelector(".sheet"));
+}
+// One director, every film, with what's playing in New York shown first.
+function openDirector(id) {
+  const d = settings().directors.find((x) => x.id === id);
+  if (!d) return;
+  const items = upcomingItems().filter((u) => u.status === "active" && u.reasons.some((r) => r.interest === d.id));
+  const next = new Map();
+  for (const u of items) for (const f of u.films) { const k = f.title.toLowerCase(); if (!next.has(k)) next.set(k, u); }
+  const fg = (d.filmography || []).slice().sort((a, b) => (next.has(b.title.toLowerCase()) - next.has(a.title.toLowerCase())) || (a.year || 0) - (b.year || 0));
+  sheetRoot.innerHTML = `<div class="scrim" data-action="close-sheet"></div>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="dir-title"><div class="sheet__grab"></div>
+      <div class="sheet__hero"><button class="icon-btn sheet__close" data-action="close-sheet" aria-label="Close">${ICON.close}</button>
+        <div class="sheet__head">${avatar(d.name, d.tmdb, d.photo, "avatar--lg")}<div><h2 class="sheet__title" id="dir-title">${h(d.name)}</h2>
+        <div class="card__meta">${[d.years, plural(fg.length, "film"), items.length ? `${plural(items.length, "screening")} coming up` : "Nothing playing right now"].filter(Boolean).map(h).join(" · ")}</div></div></div></div>
+      <div class="sheet__section"><div class="group">${fg.map((f) => {
+        const u = next.get(f.title.toLowerCase());
+        return `${u ? `<button class="row row--link" data-action="open" data-key="${h(u.key)}">` : `<div class="row">`}<div class="row__main"><div class="row__title">${h(f.title)} <span style="color:var(--text-3);font-weight:400">${f.year || ""}</span></div>
+          ${u ? `<div class="row__sub" style="color:var(--brass-hi)">${h(relDay(u.date) || fmtDay(u.date, { weekday: "short", month: "short", day: "numeric" }))} · ${h(u.venue)}</div>` : ""}</div>${u ? `<span aria-hidden="true">›</span></button>` : `</div>`}`;
+      }).join("")}</div></div></div>`;
   dragToDismiss(sheetRoot.querySelector(".sheet"));
 }
 function askCheck() {
@@ -1994,6 +2015,8 @@ async function onAction(el, ev) {
   if (a === "fb-open") return openFeedback();
   if (a === "fb-kind") { el.parentElement.querySelectorAll("button").forEach((b) => { const on = b === el; b.setAttribute("aria-pressed", on); b.setAttribute("aria-checked", on); }); return; }
   if (a === "fb-done") return feedbackDone(el.dataset.id);
+  if (a === "fg-more") { state.expanded = { ...(state.expanded || {}), [el.dataset.id]: true }; return render(); }
+  if (a === "dir-open") return openDirector(el.dataset.id);
   if (a === "egg-try") { const x = SHOWCASE.find(([k]) => k === el.dataset.k); if (x) x[2](); return; }
   if (a === "setup-hide") {
     try { localStorage.setItem("filament.setup", "hidden"); } catch { /* ignore */ }
@@ -2242,7 +2265,7 @@ function bindWelcome() {
 applyTheme();
 // Instant launch & offline: cache the app itself (never your data).
 if ("serviceWorker" in navigator && !isLocal()) {
-  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261110032648").catch(() => {}));
+  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261110032910").catch(() => {}));
 }
 // Friend invite links: #invite=<key>&api=<friends service> (the fragment never reaches any server).
 (function acceptInvite() {
