@@ -1159,3 +1159,27 @@ body { overscroll-behavior-y: contain; }
 @keyframes neon { 0% { opacity: 0; } 15%, 75% { opacity: 1; } 100% { opacity: 0; } }
 .wkw .card, .wkw .day__head { animation: ghost 3s steps(6, end) both; }
 @keyframes ghost { 30%, 60% { filter: blur(1.2px) drop-shadow(14px 0 0 rgba(0,255,170,.35)) drop-shadow(-14px 0 0 rgba(255,40,80,.35)); } }
+
+/* Filter: one quiet icon at the end of the Show row; a sheet; one summary chip while on */
+.showbar { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+.showbar .when { margin: 0; flex: 1; min-width: 0; }
+.fsheet .chip--btn { font: 500 15px/1 var(--font); padding: 9px 14px; }
+.when__filter { flex: 0 0 auto; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center;
+  color: var(--text-2); background: transparent; border: 1px solid var(--line); }
+.when__filter svg { width: 18px; height: 18px; }
+.when__filter--on { color: var(--bg); background: var(--brass, #C9A45C); border-color: transparent; }
+.filter-on { display: flex; align-items: center; gap: 6px; margin-top: 10px; }
+.filter-on__what { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: inherit; font-size: 15px; color: var(--text);
+  background: var(--surface-2, rgba(255,255,255,.06)); border: 0; border-radius: 999px; padding: 7px 14px; }
+.filter-on__x { flex: 0 0 auto; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; border: 0;
+  color: var(--text-2); background: var(--surface-2, rgba(255,255,255,.06)); }
+.filter-on__x svg { width: 14px; height: 14px; }
+.fsec { margin: 0 0 22px; }
+.fsec__title { font-size: 17px; font-weight: 600; margin: 0 0 10px; }
+.fsec--row { padding: 0; border: 0; }
+.fsheet__foot { position: sticky; bottom: 0; display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  padding: 14px 0 calc(6px + env(safe-area-inset-bottom)); background: linear-gradient(transparent, var(--sheet-bg, var(--bg)) 30%); }
+.fsheet__foot .btn--brass { flex: 1; max-width: 260px; }
+.btn--plain { background: transparent; border: 0; color: var(--text-2); }
+.btn--plain:disabled { opacity: .4; }
+.linkish { font: inherit; color: inherit; background: none; border: 0; padding: 0; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; cursor: pointer; }

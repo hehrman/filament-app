@@ -1,12 +1,12 @@
-import { creditIsDirector, fold, matchFilm, matchOccurrence, titleKey } from "./match.js?v=20261110132544";
+import { creditIsDirector, fold, matchFilm, matchOccurrence, titleKey } from "./match.js?v=20261110145233";
 import {
   ApiError, FRIENDS_API, cached, emailSignIn, forgetConnection, isLocal, joinFilament, joinInfo, letterboxdFeed, loadAll, loadConnection,
   makeSource, mutateSettings, saveConnection,
-} from "./data.js?v=20261110132544";
-import { followList, forYou, importExport, lookup, lovedDirectors, mergeFeed, recentlyWatched, stars } from "./letterboxd.js?v=20261110132544";
+} from "./data.js?v=20261110145233";
+import { followList, forYou, importExport, lookup, lovedDirectors, mergeFeed, recentlyWatched, stars } from "./letterboxd.js?v=20261110145233";
 import {
   filmographyFor, searchCatalog, searchWikidataDirectors, searchWikidataFilms, slugFromCatalog,
-} from "./search.js?v=20261110132544";
+} from "./search.js?v=20261110145233";
 
 const TZ = "America/New_York";
 const app = document.getElementById("app");
@@ -57,6 +57,7 @@ const ICON = {
   watch: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="5" cy="7" r="1.6"/><circle cx="5" cy="12" r="1.6"/><circle cx="5" cy="17" r="1.6"/><path d="M10 7h10M10 12h10M10 17h7"/></svg>`,
   archive: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><rect x="3.5" y="4" width="17" height="16" rx="1.5"/><path d="M3.5 12h17"/><path d="M10 8h4M10 16h4" stroke-linecap="round"/></svg>`,
   settings: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/><circle cx="9" cy="7" r="2" fill="var(--bg)"/><circle cx="15" cy="12" r="2" fill="var(--bg)"/><circle cx="7" cy="17" r="2" fill="var(--bg)"/></svg>`,
+  filter: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h16M7 12h10M10 17h4"/></svg>`,
   search: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>`,
   close: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>`,
   trash: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h14M10 7V5h4v2M7 7l1 13h8l1-13"/></svg>`,
@@ -412,6 +413,91 @@ function forYouBlock() {
   </section>`;
 }
 
+/* ---------------------------------------------------------- filter
+   What you see in Now Showing, narrowed. Kept on this device only; alerts have their own filters. */
+const NOTABLE_FMT = (x) => x && !/^(dcp|digital|digital video|blu-?ray|video)$/i.test(x);
+const FILTER0 = { from: "all", hideSeen: false, genres: [], decades: [], formats: [], venues: [] };
+let filt = (() => { try { return { ...FILTER0, ...JSON.parse(localStorage.getItem("filament.filter") || "{}") }; } catch { return { ...FILTER0 }; } })();
+const saveFilt = () => { try { localStorage.setItem("filament.filter", JSON.stringify(filt)); } catch { /* this device only */ } };
+const filterOn = () => filt.from !== "all" || filt.hideSeen || ["genres", "decades", "formats", "venues"].some((k) => filt[k].length);
+const filmGenres = (f) => D().listings?.genres?.[`${titleKey(f.title)}|${f.year || ""}`] || [];
+const decadeOf = (f) => (f.year ? `${Math.floor(f.year / 10) * 10}s` : null);
+function fromOf(d) {
+  const out = new Set();
+  for (const r of d.reasons || []) {
+    if (r.kind === "letterboxd") out.add(/watchlist/i.test(r.label || "") ? "watchlist" : "favorites");
+    else if (r.kind === "film") out.add("films");
+    else out.add("directors");
+  }
+  return out;
+}
+const FROM = [["all", "Everything"], ["directors", "Directors"], ["films", "Films"], ["favorites", "Letterboxd favorites"], ["watchlist", "Watchlist"]];
+function passes(d, f = filt) {
+  if (f.from !== "all" && !fromOf(d).has(f.from)) return false;
+  if (f.hideSeen && d.films.some((x) => lookup(lbData(), x)?.w)) return false;
+  if (f.genres.length && !d.films.some((x) => filmGenres(x).some((g) => f.genres.includes(g)))) return false;
+  if (f.decades.length && !d.films.some((x) => f.decades.includes(decadeOf(x)))) return false;
+  if (f.formats.length && !d.films.some((x) => f.formats.includes(x.format))) return false;
+  if (f.venues.length && !f.venues.includes(d.venue)) return false;
+  return true;
+}
+/** Only choices that would show something, plus anything already chosen. */
+function filterChoices(all) {
+  const add = (m, v) => v && m.set(v, (m.get(v) || 0) + 1);
+  const g = new Map(), dec = new Map(), fm = new Map(), v = new Map(), from = new Set();
+  let seen = 0;
+  for (const d of all) {
+    for (const x of d.films) { filmGenres(x).forEach((y) => add(g, y)); add(dec, decadeOf(x)); if (NOTABLE_FMT(x.format)) add(fm, x.format); }
+    add(v, d.venue); fromOf(d).forEach((y) => from.add(y));
+    if (d.films.some((x) => lookup(lbData(), x)?.w)) seen++;
+  }
+  const keep = (m, sel) => { sel.forEach((s) => m.has(s) || m.set(s, 0)); return [...m.keys()]; };
+  return {
+    from: FROM.filter(([k]) => k === "all" || from.has(k) || filt.from === k),
+    seen: seen > 0 || filt.hideSeen,
+    genres: keep(g, filt.genres).sort((a, b) => (g.get(b) || 0) - (g.get(a) || 0) || a.localeCompare(b)),
+    decades: keep(dec, filt.decades).sort(),
+    formats: keep(fm, filt.formats).sort(),
+    venues: keep(v, filt.venues).sort((a, b) => a.localeCompare(b)),
+  };
+}
+function filterSummary() {
+  return [filt.from !== "all" ? FROM.find(([k]) => k === filt.from)?.[1] : "", filt.hideSeen ? "Not seen" : "",
+    ...filt.genres, ...filt.decades, ...filt.formats, ...filt.venues].filter(Boolean).join(" · ");
+}
+function filterSheetBody() {
+  const all = upcomingItems().filter((d) => d.status === "active");
+  const c = filterChoices(all);
+  const n = all.filter((d) => d.date >= whenRange(state.when)[0] && d.date <= whenRange(state.when)[1] && passes(d)).length;
+  const chips = (key, vals) => `<div class="chips">${vals.map((x) => `<button class="chip chip--btn${filt[key].includes(x) ? " chip--on" : ""}" data-action="filt" data-k="${key}" data-v="${h(x)}" aria-pressed="${filt[key].includes(x)}">${h(x)}</button>`).join("")}</div>`;
+  const sec = (title, body) => `<div class="fsec"><h3 class="fsec__title">${title}</h3>${body}</div>`;
+  return `
+    ${c.from.length > 2 ? sec("From", `<div class="chips">${c.from.map(([k, l]) => `<button class="chip chip--btn${filt.from === k ? " chip--on" : ""}" data-action="filt-from" data-v="${k}" aria-pressed="${filt.from === k}">${l}</button>`).join("")}</div>`) : ""}
+    ${c.seen ? `<label class="row fsec fsec--row"><div class="row__main"><div class="row__title">Hide films I’ve seen</div></div><span class="switch"><input type="checkbox" data-action="filt-seen" ${filt.hideSeen ? "checked" : ""} aria-label="Hide films I’ve seen"><span></span></span></label>` : ""}
+    ${c.genres.length ? sec("Genre", chips("genres", c.genres)) : ""}
+    ${c.decades.length > 1 ? sec("Decade", chips("decades", c.decades)) : ""}
+    ${c.formats.length ? sec("Format", chips("formats", c.formats)) : ""}
+    ${c.venues.length > 1 ? sec("Theater", chips("venues", c.venues)) : ""}
+    <div class="fsheet__foot"><button class="btn btn--plain" data-action="filt-reset" ${filterOn() ? "" : "disabled"}>Reset</button>
+      <button class="btn btn--brass" data-action="close-sheet">${n ? `Show ${plural(n, "screening")}` : "Nothing matches"}</button></div>`;
+}
+function openFilterSheet() {
+  sheetRoot.innerHTML = `<div class="scrim" data-action="close-sheet"></div>
+    <div class="sheet fsheet" role="dialog" aria-modal="true" aria-labelledby="fsheet-title">
+      <div class="sheet__grab"></div>
+      <div class="sheet__hero"><button class="icon-btn sheet__close" data-action="close-sheet" aria-label="Close">${ICON.close}</button>
+        <h2 class="sheet__title" id="fsheet-title">Filter</h2></div>
+      <div class="sheet__section fsheet__body">${filterSheetBody()}</div>
+    </div>`;
+  dragToDismiss(sheetRoot.querySelector(".sheet"));
+}
+function filterChanged() {
+  saveFilt();
+  const b = sheetRoot.querySelector(".fsheet__body");
+  if (b) b.innerHTML = filterSheetBody();
+  render();
+}
+
 /* ----------------------------------------------------------- views */
 const WHEN = [["all", "All"], ["tonight", "Tonight"], ["weekend", "This weekend"], ["week", "Next 7 days"]];
 function whenRange(k) {
@@ -430,14 +516,16 @@ function whenRange(k) {
 function viewUpcoming() {
   const all = upcomingItems();
   const [from, to] = whenRange(state.when);
-  const items = all.filter((d) => d.date >= from && d.date <= to);
+  const items = all.filter((d) => d.date >= from && d.date <= to && passes(d));
   const s = settings();
   const names = [...s.directors.filter((d) => d.enabled !== false).map((d) => d.name), ...s.films.filter((f) => f.enabled !== false).map((f) => f.title)];
   const lbn = (interests()._letterboxd || []).length;
   if (lbn) names.push(`${lbn} Letterboxd favorites`);
   const setup = setupCard();
   const following = names.length ? `Following ${names.slice(0, 3).map(h).join(", ")}${names.length > 3 ? ` and ${names.length - 3} more` : ""}` : "You aren’t following anyone yet";
-  const body = items.length ? dayGroups(items) : all.length ? `<div class="empty"><h3>Nothing ${h({ tonight: "tonight", weekend: "this weekend", week: "in the next 7 days" }[state.when])}</h3>
+  const body = items.length ? dayGroups(items) : all.length && filterOn() ? `<div class="empty"><h3>Nothing matches</h3>
+      <p>Try fewer filters.</p>
+      <div class="actions" style="justify-content:center;margin-top:14px"><button class="btn" data-action="filt-reset">Clear filters</button></div></div>` : all.length ? `<div class="empty"><h3>Nothing ${h({ tonight: "tonight", weekend: "this weekend", week: "in the next 7 days" }[state.when])}</h3>
       <p>${plural(all.filter((d) => d.status === "active").length, "screening")} you follow ${all.length === 1 ? "is" : "are"} coming up later.</p>
       <div class="actions" style="justify-content:center;margin-top:14px"><button class="btn" data-action="when" data-v="all">Show all</button></div></div>` : `<div class="empty">${tubesArt(360, 150)}
       <h3>${names.length ? "No upcoming screenings yet" : "Tell Filament what you love"}</h3>
@@ -455,10 +543,11 @@ function viewUpcoming() {
     ${friendsGoingBlock()}
     ${all.length ? `<section class="showing" aria-label="Now showing">
       <div class="showing__head"><h2 class="marquee">Now Showing</h2><span class="showing__count">${plural(items.length, "screening")}${state.when !== "all" ? ` · ${h(WHEN.find(([k]) => k === state.when)[1].toLowerCase())}` : ""}</span></div>
-      <div class="when" role="radiogroup" aria-label="Filter the screenings below"><span class="when__label">Show</span>${WHEN.map(([k, l]) => `<button class="when__chip" role="radio" data-action="when" data-v="${k}" aria-pressed="${state.when === k}" aria-checked="${state.when === k}">${l}</button>`).join("")}</div>
+      <div class="showbar"><div class="when" role="radiogroup" aria-label="Filter the screenings below"><span class="when__label">Show</span>${WHEN.map(([k, l]) => `<button class="when__chip" role="radio" data-action="when" data-v="${k}" aria-pressed="${state.when === k}" aria-checked="${state.when === k}">${l}</button>`).join("")}</div><button class="when__filter${filterOn() ? " when__filter--on" : ""}" data-action="filter-open" aria-label="Filter${filterOn() ? `: ${h(filterSummary())}` : ""}">${ICON.filter}</button></div>
+      ${filterOn() ? `<div class="filter-on"><button class="filter-on__what" data-action="filter-open">${h(filterSummary())}</button><button class="filter-on__x" data-action="filt-reset" aria-label="Clear filters">${ICON.close}</button></div>` : ""}
     </section>` : ""}
     ${setup && !names.length ? "" : body}
-    ${forYouBlock()}`}
+    ${filterOn() ? "" : forYouBlock()}`}
   </div>`;
 }
 
@@ -645,8 +734,8 @@ function openVenueSheet() {
     <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="vsheet-title">
       <div class="sheet__grab"></div>
       <div class="sheet__hero"><button class="icon-btn sheet__close" data-action="close-sheet" aria-label="Close">${ICON.close}</button>
-        <div class="eyebrow">Email filters</div><h2 class="sheet__title" id="vsheet-title">Theaters</h2>
-        <p class="page-sub">Only email screenings at the theaters you tick. Tick none for any theater.</p></div>
+        <h2 class="sheet__title" id="vsheet-title">Theaters</h2>
+        <p class="page-sub">Alerts only for the theaters you tick. Tick none for any theater.</p></div>
       <div class="sheet__section"><div class="group">${availableVenues(vs).map(([slug, name]) => `
         <label class="row" style="cursor:pointer"><div class="row__main"><div class="row__title">${h(name)}</div></div>
           <span class="switch"><input type="checkbox" data-action="venue-toggle" value="${h(slug)}" ${vs.includes(slug) ? "checked" : ""} aria-label="${h(name)}"><span></span></span></label>`).join("")}</div>
@@ -969,6 +1058,11 @@ function openSheet(key) {
   const rel = d.date === todayISO() ? "Tonight" : n === 1 ? "Tomorrow" : "";
   const single = d.films.length === 1 ? d.films[0] : null;
   const fmts = [...new Set(d.films.map((f) => f.format).filter(Boolean))];
+  const dirLinks = (f) => (f.directors || []).map((c) => {
+    const fd = settings().directors.find((x) => creditIsDirector(c, x));
+    return fd ? `<button class="linkish" data-action="dir-open" data-id="${h(fd.id)}">${h(c.name)}</button>` : h(c.name);
+  }).join(", ");
+  const metaHtml = single ? [dirLinks(single), single.year, single.runtime ? `${single.runtime} min` : "", single.format].filter(Boolean).map((x, i) => (i ? h(x) : x)).join(" · ") : "";
   const meta = single ? [directorsOf(single), single.year, single.runtime ? `${single.runtime} min` : "", single.format].filter(Boolean).join(" · ")
     : d.films.map((f) => f.title).join(" + ");
   const lb = reasons.some((r) => r.kind === "letterboxd") ? null : d.films.map((f) => lookup(lbData(), f)).find((r) => r && (r.w || r.wl));
@@ -990,7 +1084,7 @@ function openSheet(key) {
         <button class="icon-btn sheet__close" data-action="close-sheet" aria-label="Close">${ICON.close}</button>
         <div class="sheet__head">${posterImg(d.poster, "sheet__poster")}<div>
         <h2 class="sheet__title" id="sheet-title">${h(d.films.map((f) => f.title).join(" + "))}</h2>
-        <div class="card__meta">${h(meta)}</div>
+        <div class="card__meta">${single ? metaHtml : h(meta)}</div>
         </div></div>
       </div>
       <div class="sheet__section ww">
@@ -2010,7 +2104,7 @@ function gotALight() {
   if (reducedMotion()) { subtitle("Got a light?"); return; }
   document.body.classList.add("woodsman");
   overlay("grain", "", 7000);
-  try { const v = new Audio("got-a-light.m4a?v=20261110132544"); v.volume = 0.9; v.play().catch(() => radioStatic(5)); } catch { radioStatic(5); }
+  try { const v = new Audio("got-a-light.m4a?v=20261110145233"); v.volume = 0.9; v.play().catch(() => radioStatic(5)); } catch { radioStatic(5); }
   setTimeout(() => subtitle("Got a light?"), 150);         // the line comes in the first second of the clip
   setTimeout(() => document.body.classList.remove("woodsman"), 7200);
 }
@@ -2364,6 +2458,10 @@ async function onAction(el, ev) {
   }
   if (a === "days") return saveFilters((f) => { f.days = el.dataset.v; }, "Saved");
   if (a === "venues") return openVenueSheet();
+  if (a === "filter-open") return openFilterSheet();
+  if (a === "filt") { const k = el.dataset.k, v = el.dataset.v; filt[k] = filt[k].includes(v) ? filt[k].filter((x) => x !== v) : [...filt[k], v]; return filterChanged(); }
+  if (a === "filt-from") { filt.from = el.dataset.v; return filterChanged(); }
+  if (a === "filt-reset") { filt = { ...FILTER0 }; return filterChanged(); }
   if (a === "disconnect") {
     if (!confirm(isFriend() ? "Sign out on this device? Everything you follow stays saved. Get back in any time with a sign-in link sent to your email." : "Disconnect this device? Your watchlist and history stay safe on GitHub.")) return;
     forgetConnection(); state.src = null; state.data = null; return render();
@@ -2427,6 +2525,8 @@ document.addEventListener("change", (ev) => {
   if (el.dataset.action === "toggle") {
     const { kind, id } = el.dataset, on = el.checked;
     saveSettings((s) => { const x = s[kind].find((i) => i.id === id); if (x) x.enabled = on; }, `${on ? "Resume" : "Pause"} monitoring`, on ? "Monitoring resumed" : "Paused");
+  } else if (el.dataset.action === "filt-seen") {
+    filt.hideSeen = el.checked; filterChanged();
   } else if (el.dataset.action === "sounds") {
     try { localStorage.setItem("filament.sounds", el.checked ? "on" : "off"); } catch { /* ignore */ }
     if (el.checked) sfx.chime([988, 1318], { gain: 0.04 });
@@ -2536,7 +2636,7 @@ function bindWelcome() {
 applyTheme();
 // Instant launch & offline: cache the app itself (never your data).
 if ("serviceWorker" in navigator && !isLocal()) {
-  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261110132544").catch(() => {}));
+  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261110145233").catch(() => {}));
 }
 // Friend invite links: #invite=<key>&api=<friends service> (the fragment never reaches any server).
 (function acceptInvite() {
