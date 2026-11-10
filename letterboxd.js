@@ -1,7 +1,7 @@
 // Letterboxd in the app: read an export .zip on-device, decide which films are
 // followed automatically, mark films you've seen, and suggest "For you".
 // Mirrors monitor/letterboxd.py (same keys, same thresholds, same aliases).
-import { fold, nameKey, titleKey } from "./match.js?v=20261110162704";
+import { fold, nameKey, titleKey } from "./match.js?v=20261110164828";
 
 export const filmKey = (title, year) => `${titleKey(title)}|${year || ""}`;
 
@@ -108,7 +108,7 @@ export function forYou(occurrences, data, isFollowed, today, recentMonths) {
       else if (rec?.wl) { score = 6; why = "On your Letterboxd watchlist"; }
       else {
         const d = (f.directors || []).map((c) => loved.get(c.tmdb ? `t${c.tmdb}` : "") || loved.get(`n${nameKey(c.name)}`)).find(Boolean);
-        if (d) { score = 2 + Math.min(d.films.length, 10) / 10; why = `By ${d.name} — you’ve rated ${d.films.length} of their films 4★ or higher`; }
+        if (d) { score = 2 + Math.min(d.films.length, 10) / 10; why = `By ${d.name}. You’ve rated ${d.films.length} of their films 4★ or higher`; }
       }
       if (!score) continue;
       const k = f.slug || fold(f.title);

@@ -180,7 +180,7 @@ class FriendSource {
   }
   async writeFile(name, obj) { await this.call(`/api/file?name=${encodeURIComponent(name)}`, { method: "PUT", body: JSON.stringify({ content: obj }) }); }
   async feedback(kind, text, context) { return this.call("/api/feedback", { method: "POST", body: JSON.stringify({ kind, text, context }) }); }
-  async dispatch() { throw new ApiError("Checks run every morning at 9 — anything new appears then.", 403); }
+  async dispatch() { throw new ApiError("Checks run every morning at 9. Anything new appears then.", 403); }
   async activeRun() { return null; }
   async lastRun() { return null; }
 }
@@ -227,5 +227,5 @@ export async function mutateSettings(src, fn, message) {
       if (e.status !== 409 && e.status !== 422) throw e;   // someone else saved first: retry
     }
   }
-  throw new ApiError("Couldn't save — please try again.", 409);
+  throw new ApiError("Couldn’t save. Please try again.", 409);
 }

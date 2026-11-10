@@ -1,12 +1,12 @@
-import { creditIsDirector, fold, matchFilm, matchOccurrence, titleKey } from "./match.js?v=20261110162704";
+import { creditIsDirector, fold, matchFilm, matchOccurrence, titleKey } from "./match.js?v=20261110164828";
 import {
   ApiError, FRIENDS_API, trustedApi, cached, emailSignIn, forgetConnection, isLocal, joinFilament, joinInfo, letterboxdFeed, loadAll, loadConnection,
   makeSource, mutateSettings, saveConnection,
-} from "./data.js?v=20261110162704";
-import { followList, forYou, importExport, lookup, lovedDirectors, mergeFeed, recentlyWatched, stars } from "./letterboxd.js?v=20261110162704";
+} from "./data.js?v=20261110164828";
+import { followList, forYou, importExport, lookup, lovedDirectors, mergeFeed, recentlyWatched, stars } from "./letterboxd.js?v=20261110164828";
 import {
   filmographyFor, searchCatalog, searchWikidataDirectors, searchWikidataFilms, slugFromCatalog,
-} from "./search.js?v=20261110162704";
+} from "./search.js?v=20261110164828";
 
 const TZ = "America/New_York";
 const app = document.getElementById("app");
@@ -34,7 +34,7 @@ function relDay(iso) {
   return "";
 }
 function fmtWhen(ts) {
-  if (!ts) return "—";
+  if (!ts) return "not yet";
   const d = new Date(ts);
   const day = nyDate(d);
   const time = new Intl.DateTimeFormat("en-US", { timeZone: TZ, hour: "numeric", minute: "2-digit" }).format(d);
@@ -1375,7 +1375,7 @@ function postEl(m, where, prev) {
   const mine = m.by === myGoingId();
   const open = state.reactOpen === `${where.room || where.key}|${m.id}`;
   const grouped = prev && prev.by === m.by && nyDate(new Date(prev.at)) === nyDate(new Date(m.at)) && new Date(m.at) - new Date(prev.at) < 7 * 6e4 && !m.reply;
-  const re = Object.entries(m.re || {});
+  const re = Object.entries(m.re || {}).filter(([e, w]) => REACTIONS.includes(e) && Array.isArray(w));   // only the five, whatever the file says
   const who = mine ? "You" : m.name;
   return `<li class="post${grouped ? " post--cont" : ""}${mine ? " post--mine" : ""}${open ? " post--open" : ""}" id="post-${h(m.id)}">
     ${grouped ? `<time class="post__hover">${clock(m.at)}</time>` : avatarFor(m)}
@@ -2518,7 +2518,7 @@ function gotALight() {
   if (reducedMotion()) { subtitle("Got a light?"); return; }
   document.body.classList.add("woodsman");
   overlay("grain", "", 7000);
-  try { const v = new Audio("got-a-light.m4a?v=20261110162704"); v.volume = 0.9; v.play().catch(() => radioStatic(5)); } catch { radioStatic(5); }
+  try { const v = new Audio("got-a-light.m4a?v=20261110164828"); v.volume = 0.9; v.play().catch(() => radioStatic(5)); } catch { radioStatic(5); }
   setTimeout(() => subtitle("Got a light?"), 150);         // the line comes in the first second of the clip
   setTimeout(() => document.body.classList.remove("woodsman"), 7200);
 }
@@ -3110,7 +3110,7 @@ function bindWelcome() {
 applyTheme();
 // Instant launch & offline: cache the app itself (never your data).
 if ("serviceWorker" in navigator && !isLocal()) {
-  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261110162704").catch(() => {}));
+  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261110164828").catch(() => {}));
 }
 // Friend invite links: #invite=<key>&api=<friends service> (the fragment never reaches any server).
 (function acceptInvite() {
