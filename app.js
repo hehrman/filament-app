@@ -1,12 +1,12 @@
-import { creditIsDirector, fold, matchFilm, matchOccurrence, titleKey } from "./match.js?v=20261110033238";
+import { creditIsDirector, fold, matchFilm, matchOccurrence, titleKey } from "./match.js?v=20261110034217";
 import {
   ApiError, FRIENDS_API, cached, emailSignIn, forgetConnection, isLocal, joinFilament, joinInfo, letterboxdFeed, loadAll, loadConnection,
   makeSource, mutateSettings, saveConnection,
-} from "./data.js?v=20261110033238";
-import { followList, forYou, importExport, lookup, lovedDirectors, mergeFeed, recentlyWatched, stars } from "./letterboxd.js?v=20261110033238";
+} from "./data.js?v=20261110034217";
+import { followList, forYou, importExport, lookup, lovedDirectors, mergeFeed, recentlyWatched, stars } from "./letterboxd.js?v=20261110034217";
 import {
   filmographyFor, searchCatalog, searchWikidataDirectors, searchWikidataFilms, slugFromCatalog,
-} from "./search.js?v=20261110033238";
+} from "./search.js?v=20261110034217";
 
 const TZ = "America/New_York";
 const app = document.getElementById("app");
@@ -415,7 +415,7 @@ function viewUpcoming() {
       <p>${plural(all.filter((d) => d.status === "active").length, "screening")} you follow ${all.length === 1 ? "is" : "are"} coming up later.</p>
       <div class="actions" style="justify-content:center;margin-top:14px"><button class="btn" data-action="when" data-v="all">Show all</button></div></div>` : `<div class="empty">${tubesArt(360, 150)}
       <h3>${names.length ? "No upcoming screenings yet" : "Tell Filament what you love"}</h3>
-      <p>${!names.length ? "Follow a director or a film, or connect Letterboxd. The moment one is scheduled in New York, you’ll get a notification or an email. And it shows up right here."
+      <p>${!names.length ? "Follow a director or a film, or connect Letterboxd. The moment one is scheduled in New York, you’ll get a notification or an email, and it shows up right here."
         : D().status?.last_success ? "Nothing you follow is playing in New York right now. Filament checks every morning and will email you the moment something appears." : "Once the first check runs, upcoming screenings of what you follow will appear here."}</p>
       ${names.length ? "" : `<div class="actions" style="justify-content:center;margin-top:16px"><button class="btn btn--brass" data-action="nav" data-view="watch">Follow a director or film</button>${isFriend() ? `<button class="btn" data-action="lb-start">Import from Letterboxd</button>` : ""}</div>`}</div>`;
   return `<div class="page">
@@ -501,7 +501,7 @@ function lbConnectCard() {
 function lbImportGuide(lead) {
   return `<section class="lbimport">
     <h3>${lead ? "Next: bring in your full history" : "Import your full history"}</h3>
-    <p>${lead ? "Connecting reads your most recent diary entries. Your full export adds every film you’ve ever rated. And your watchlist. So all your favorites are followed. It takes about a minute." : "Adds every film you’ve ever rated, plus your watchlist."}</p>
+    <p>${lead ? "Connecting reads your most recent diary entries. Your full export adds every film you’ve ever rated, plus your watchlist, so all your favorites are followed. It takes about a minute." : "Adds every film you’ve ever rated, plus your watchlist."}</p>
     <ol class="guide">
       <li><span class="guide__n">1</span><div><div>Open your Letterboxd data page and sign in.</div><a class="btn btn--sm" href="https://letterboxd.com/settings/data/" target="_blank" rel="noopener">Open Letterboxd ↗</a></div></li>
       <li><span class="guide__n">2</span><div><div>Tap <span class="mock-btn">Export your data</span>. A .zip file downloads. On iPhone it goes to <b>Files → Downloads</b>.</div></div></li>
@@ -573,7 +573,7 @@ function viewWatchlist() {
           <div class="row__sub">${h([(f.directors || []).join(", "), f.aka?.length ? `also “${f.aka.slice(0, 2).join("”, “")}”` : ""].filter(Boolean).join(" · "))}${n ? ` · <span class="interest__count">${plural(n, "upcoming")}</span>` : ""}</div></div>
           <label class="switch"><input type="checkbox" data-action="toggle" data-kind="films" data-id="${h(f.id)}" ${f.enabled === false ? "" : "checked"} aria-label="Monitor ${h(f.title)}"><span></span></label>
           <button class="icon-btn" data-action="remove" data-kind="films" data-id="${h(f.id)}" aria-label="Remove ${h(f.title)}">${ICON.trash}</button></div></div>`;
-      }).join("")}</div>` : `<div class="empty"><h3>No individual films yet</h3><p>Follow a single film. Like <i>Eyes Wide Shut</i>. Without following its director’s whole career.</p></div>`);
+      }).join("")}</div>` : `<div class="empty"><h3>No individual films yet</h3><p>Follow a single film, like <i>Eyes Wide Shut</i>, without following its director’s whole career.</p></div>`);
   return `<div class="page">
     <header class="page-head"><div><h1 class="page-title">Following</h1></div>
       <div class="seg" role="group" aria-label="Directors, films or Letterboxd">
@@ -659,7 +659,7 @@ function viewSettings() {
     <div class="group-label">Email</div>
     <div class="group">
       ${row("Email alerts", "", sw("email_enabled", n.email_enabled !== false, "Email alerts"))}
-      ${row("Send to", "", `<input type="email" id="recipient" value="${h(n.recipient || "")}" placeholder="${isFriend() ? "you@example.com" : "Address saved in GitHub"}" style="width:min(240px,52vw)">`)}
+      ${row("Send to", "", `<input type="email" id="recipient" value="${h(n.recipient || "")}" placeholder="${isFriend() ? "you@example.com" : "Default address"}" style="width:min(240px,52vw)">`)}
     </div>
     <div class="group-label">Tell me about</div>
     <div class="group">
@@ -705,16 +705,16 @@ function viewSettings() {
 
 const FAQ = [
   ["What is Filament?", "A personal watch over New York’s repertory, arthouse and independent screenings. You tell it which directors and films you love; it checks the city’s screening listings every morning and tells you when one of them is scheduled."],
-  ["Where do the listings come from?", "From Screen Slate, the independent daily guide to New York’s film screenings. Filament reads its public NYC listings once a day and links back to them. It covers repertory houses, museums and arthouse cinemas. Film Forum, Metrograph, BAM, IFC, Anthology, Film at Lincoln Center, MoMA, Alamo and many more. Not every multiplex."],
+  ["Where do the listings come from?", "From Screen Slate, the independent daily guide to New York’s film screenings. Filament reads its public NYC listings once a day and links back to them. It covers repertory houses, museums and arthouse cinemas. Film Forum, Metrograph, BAM, IFC, Anthology, Film at Lincoln Center, MoMA, Alamo and many more, though not every multiplex."],
   ["How often does it check?", "Every morning at 9:00 AM New York time, in the cloud. Your phone and laptop can be off."],
   ["How far ahead does it look?", "As far as the listings go. It reads every published date and keeps going until there’s a long stretch with nothing scheduled, so it automatically reaches further when theaters announce further ahead."],
   ["How does it know a film is by a director I follow?", "Each listing links its directors to a permanent ID number, so matching never depends on spelling. Individual films are matched by title (including alternate titles) and confirmed by year or director, so a remake with the same name won’t set it off."],
   ["What does following a director do?", "Every screening of every film they directed, including ones you didn’t know about, shows up in Upcoming and in your emails. Follow a single film instead if you only care about that one."],
   ["How does Letterboxd work here?", "Connect with just your username (Following → Letterboxd). No password. Films you rated 4.5★ or higher are followed automatically, anything you’ve logged is marked “Seen,” and each morning Filament reads your public diary so new favorites are picked up on their own. For your complete history and watchlist, import your Letterboxd export from the same page."],
-  ["How are “For you” picks chosen?", "From your Letterboxd ratings. Filament learns which directors, writers, cinematographers, composers, actors, genres and eras you rate above your own average. So a tough rater’s 4★ counts for more. Then checks everything playing in New York against that. Every pick says why, and nothing is suggested without real evidence. Films you’ve already seen are left out."],
+  ["How are “For you” picks chosen?", "From your Letterboxd ratings. Filament learns which directors, writers, cinematographers, composers, actors, genres and eras you rate above your own average (so a tough rater’s 4★ counts for more). Then checks everything playing in New York against that. Every pick says why, and nothing is suggested without real evidence. Films you’ve already seen are left out."],
   ["Why isn’t a favorite showing up?", "If you watched it in the last 4 months, Filament assumes you don’t need a reminder yet. Change or turn off that rule in Settings → Letterboxd. It may also simply not be scheduled in New York right now. Try “Is it playing?” at the top of Upcoming."],
   ["What gets stored about me?", "Only what Filament needs: your name and email (for alerts), the directors and films you follow, your settings, and from Letterboxd just titles, years, ratings, watch dates and your watchlist, never your profile or reviews. It’s kept private, never shared or sold, and there’s no password to leak."],
-  ["How do I use it on another phone or computer?", "Open Filament there and choose “Email me a sign-in link”. Or in Settings, tap “Share link” on a device you already use. No passwords."],
+  ["How do I use it on another phone or computer?", "Open Filament there and choose “Email me a sign-in link”, or in Settings tap “Share link” on a device you already use. No passwords."],
   ["Emails or notifications?", "Both, if you like. Emails group everything new from a check into one message, plus a Sunday “Playing this week” digest. Phone notifications (Settings → Phone notifications) put the same news on your lock screen."],
   ["What will I be told about?", "New screenings of what you follow, changes (moved dates, new or changed showtimes), cancellations, and a “last chance” reminder when a film’s run is down to its final screening. Each piece of news only once. Filters in Settings can limit emails to, say, 35mm prints or certain theaters."],
   ["Can I buy tickets here?", "No. Filament points you to each theater’s own ticket page (“Tickets”), where you buy directly from the venue."],
@@ -1332,7 +1332,7 @@ function friendsBlock() {
   }
   const active = list.filter((f) => f.enabled !== false).length;
   const joinRow = !j ? `<div class="row"><div class="row__main"><div class="row__title">Invite friends</div>
-      <div class="row__sub">Make one link you can text to anyone. They sign up with just their name and email. No accounts, no passwords. And start with a blank Filament of their own.</div></div>
+      <div class="row__sub">Make one link you can text to anyone. They sign up with just their name and email. No accounts or passwords, and they start with a blank Filament of their own.</div></div>
       <button class="btn btn--sm btn--brass" data-action="join-create">Create link</button></div>`
     : `<div class="row join-row"><div class="row__main"><div class="row__title">Join link ${j.enabled === false ? `<span class="tag tag--gone">Off</span>` : ""}</div>
       <div class="row__sub">${j.enabled === false ? "Turned off. Nobody new can join. Everyone who joined keeps their Filament." : `Anyone with this link can join · ${active} of ${j.cap || JOIN_CAP} places used`}</div></div>
@@ -1589,7 +1589,7 @@ function rememberSearchSoon(q) {
 
 /* --------------------------------------------------------- what's new */
 const WHATS_NEW = { id: "2026-11-taste", items: [
-  ["For you, with reasons", "Suggestions now learn your taste from your Letterboxd ratings. Directors, cinematographers, writers, composers, genres. And say why: “Shot by Robby Müller, like Paris, Texas.”"],
+  ["For you, with reasons", "Suggestions now learn your taste from your Letterboxd ratings (directors, cinematographers, writers, composers, genres) and say why: “Shot by Robby Müller, like Paris, Texas.”"],
   ["Letterboxd in one step", "Connect with just your username. Import your full history any time from Following → Letterboxd."],
   ["Settings, reorganized", "Alerts come first (how you’re told and what about), then Letterboxd, friends and this device."],
   ["Feedback", "Friends can send bugs and ideas straight from Settings."],
@@ -2304,7 +2304,7 @@ function bindWelcome() {
 applyTheme();
 // Instant launch & offline: cache the app itself (never your data).
 if ("serviceWorker" in navigator && !isLocal()) {
-  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261110033238").catch(() => {}));
+  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261110034217").catch(() => {}));
 }
 // Friend invite links: #invite=<key>&api=<friends service> (the fragment never reaches any server).
 (function acceptInvite() {
