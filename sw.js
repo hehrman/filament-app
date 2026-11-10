@@ -3,7 +3,7 @@
 const V = new URL(self.location).searchParams.get("v") || "dev";
 const CACHE = `filament-${V}`;
 const SHELL = ["./", "index.html", `styles.css?v=${V}`, `app.js?v=${V}`, `data.js?v=${V}`, `match.js?v=${V}`,
-  `search.js?v=${V}`, `letterboxd.js?v=${V}`, "manifest.webmanifest", "icon.svg", "icon-180.png"];
+  `search.js?v=${V}`, `letterboxd.js?v=${V}`, "manifest.webmanifest", "icon.svg", "icon-180.png", "jost.woff2"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
