@@ -1342,3 +1342,7 @@ a.logit .lb-mark { flex: none; }
 .lobby2 { display: grid; grid-template-columns: 260px 1fr; gap: 24px; align-items: start; }
 .lobby2__rooms { position: sticky; top: 16px; padding-right: 16px; border-right: 1px solid var(--line); }
 .lobby2__chat { min-width: 0; }
+
+.post__av--lamp { background: radial-gradient(circle at 50% 42%, rgba(255,214,140,.35), transparent 70%), var(--surface-2); color: var(--brass-hi); }
+.post__av--lamp svg { width: 30px; height: 30px; }
+.post__av--lamp .filament { stroke: #FFE2A8; }

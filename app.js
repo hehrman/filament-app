@@ -1,12 +1,12 @@
-import { creditIsDirector, fold, matchFilm, matchOccurrence, titleKey } from "./match.js?v=20261110165329";
+import { creditIsDirector, fold, matchFilm, matchOccurrence, titleKey } from "./match.js?v=20261110172039";
 import {
   ApiError, FRIENDS_API, trustedApi, cached, emailSignIn, forgetConnection, isLocal, joinFilament, joinInfo, letterboxdFeed, loadAll, loadConnection,
   makeSource, mutateSettings, saveConnection,
-} from "./data.js?v=20261110165329";
-import { followList, forYou, importExport, lookup, lovedDirectors, mergeFeed, recentlyWatched, stars } from "./letterboxd.js?v=20261110165329";
+} from "./data.js?v=20261110172039";
+import { followList, forYou, importExport, lookup, lovedDirectors, mergeFeed, recentlyWatched, stars } from "./letterboxd.js?v=20261110172039";
 import {
   filmographyFor, searchCatalog, searchWikidataDirectors, searchWikidataFilms, slugFromCatalog,
-} from "./search.js?v=20261110165329";
+} from "./search.js?v=20261110172039";
 
 const TZ = "America/New_York";
 const app = document.getElementById("app");
@@ -535,6 +535,7 @@ function viewUpcoming() {
     <div class="search search--find">${ICON.search}<input id="find" type="search" autocomplete="off" placeholder="Is it playing? Search any film" value="${h(state.find)}" aria-label="Search everything playing in New York"></div>
     ${!state.find && recentSearches().length ? `<div class="recents"><span>Recent</span>${recentSearches().map((q) => `<button class="chip chip--btn recents__q" data-action="recent" data-q="${h(q)}">${h(q)}</button>`).join("")}<button class="recents__clear" data-action="recent-clear">Clear</button></div>` : ""}
     ${state.find.trim().length >= 2 ? viewFind() : `
+    ${movedCard()}
     ${setup}
     ${consoleBlock()}
     ${setup ? "" : names.length && !isFriend() ? homeScreenTip() : ""}
@@ -1362,7 +1363,9 @@ function dayLabel(ts) {
 }
 const AV_HUES = [32, 14, 205, 165, 275, 340, 95, 48];
 const avHue = (s) => { let x = 7; for (const c of String(s)) x = (x * 31 + c.charCodeAt(0)) >>> 0; return AV_HUES[x % AV_HUES.length]; };
-const avatarFor = (m) => `<span class="post__av" style="--h:${avHue(m.by)}" aria-hidden="true">${h((m.name || "?").trim().charAt(0).toUpperCase())}</span>`;
+const avatarFor = (m) => (m.by === "owner"
+  ? `<span class="post__av post__av--lamp" aria-hidden="true">${lampSVG}</span>`     // The Projectionist keeps the lamp lit
+  : `<span class="post__av" style="--h:${avHue(m.by)}" aria-hidden="true">${h((m.name || "?").trim().charAt(0).toUpperCase())}</span>`);
 const SEND_ICON = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M6 11l6-6 6 6"/></svg>`;
 function refCard(key) {
   const o = D().listings?.occurrences?.[key] || D().history?.discoveries?.[key];
@@ -2000,7 +2003,7 @@ function openFeedback() {
   sheetRoot.innerHTML = `<div class="scrim" data-action="close-sheet"></div>
     <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="fb-title"><div class="sheet__grab"></div>
       <div class="sheet__hero"><button class="icon-btn sheet__close" data-action="close-sheet" aria-label="Close">${ICON.close}</button>
-        <h2 class="sheet__title" id="fb-title">Tell ${h(who.split(" ")[0])}</h2>
+        <h2 class="sheet__title" id="fb-title">Tell ${h(/^the /i.test(who) ? who : who.split(" ")[0])}</h2>
         <p class="page-sub">Bugs, ideas, questions. Anything. Replies come to your email.</p></div>
       <div class="sheet__section"><form id="fb-form">
         <div class="seg fb-kinds" role="radiogroup" aria-label="Kind">${FB_KINDS.map(([k, l], i) => `<button type="button" data-action="fb-kind" data-v="${k}" role="radio" aria-pressed="${i === 0}" aria-checked="${i === 0}">${l}</button>`).join("")}</div>
@@ -2068,6 +2071,15 @@ function a2hsSteps(p) {
   if (p === "android") return installPrompt ? `<button class="btn btn--sm btn--brass" data-action="a2hs-install">Install Filament</button>`
     : `<div class="a2hs__steps">Tap <b>⋮</b> in Chrome, then <b>Add to Home screen</b></div>`;
   return `<div class="a2hs__steps">In Safari, tap <span class="a2hs__glyph">${SHARE_GLYPH}</span> <b>Share</b> <span class="a2hs__or">(or <b>•••</b> then Share)</span>, then <b>Add to Home Screen</b></div>`;
+}
+function movedCard() {
+  if (!state.moved || isStandalone() || !a2hsPlatform()) return "";
+  return `<aside class="a2hs" aria-label="Filament has a new home">
+    <img class="a2hs__icon" src="icon-180.png" alt="" width="46" height="46">
+    <div class="a2hs__body"><div class="a2hs__t">Filament has a new home</div>
+      <div class="a2hs__d">You’re signed in and everything’s here. Add it to your Home Screen again so it opens full screen. You can delete the old icon.</div>
+      ${a2hsSteps(a2hsPlatform())}</div>
+    <button class="icon-btn a2hs__x" data-action="moved-dismiss" aria-label="Done">${ICON.close}</button></aside>`;
 }
 function homeScreenTip() {
   const p = a2hsPlatform();
@@ -2518,7 +2530,7 @@ function gotALight() {
   if (reducedMotion()) { subtitle("Got a light?"); return; }
   document.body.classList.add("woodsman");
   overlay("grain", "", 7000);
-  try { const v = new Audio("got-a-light.m4a?v=20261110165329"); v.volume = 0.9; v.play().catch(() => radioStatic(5)); } catch { radioStatic(5); }
+  try { const v = new Audio("got-a-light.m4a?v=20261110172039"); v.volume = 0.9; v.play().catch(() => radioStatic(5)); } catch { radioStatic(5); }
   setTimeout(() => subtitle("Got a light?"), 150);         // the line comes in the first second of the clip
   setTimeout(() => document.body.classList.remove("woodsman"), 7200);
 }
@@ -2879,6 +2891,7 @@ async function onAction(el, ev) {
   if (a === "days") return saveFilters((f) => { f.days = el.dataset.v; }, "Saved");
   if (a === "venues") return openVenueSheet();
   if (a === "filter-open") return openFilterSheet();
+  if (a === "moved-dismiss") { state.moved = false; try { localStorage.setItem("filament.moved.seen", "1"); } catch { /* ignore */ } return render(); }
   if (a === "people") return openPeople();
   if (a === "people-apart") return openApart(el.dataset.id);
   if (a === "people-remove") {
@@ -3073,7 +3086,7 @@ function bindWelcome() {
       state.src = makeSource(conn);
       state.view = "upcoming";
       await refresh();
-      toast(`Welcome, ${r.name.split(" ")[0]}. start by following someone you love`);
+      toast(`Welcome, ${r.name.split(" ")[0]}. Start by following someone you love.`);
     } catch (e) { Object.assign(j, { busy: false, error: e.message }); if (e.status === 403 && /isn’t active/.test(e.message)) j.dead = e.message; render(); }
   };
   const sf = document.getElementById("signin");
@@ -3110,8 +3123,15 @@ function bindWelcome() {
 applyTheme();
 // Instant launch & offline: cache the app itself (never your data).
 if ("serviceWorker" in navigator && !isLocal()) {
-  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261110165329").catch(() => {}));
+  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261110172039").catch(() => {}));
 }
+// Arrived from the old address? One quiet card offers to put the new one on the Home Screen.
+(function arrivedFromOldHome() {
+  const p = new URLSearchParams(location.hash.slice(1));
+  if (p.get("moved")) { try { if (!localStorage.getItem("filament.moved.seen")) state.moved = true; } catch { /* ignore */ } }
+  if (p.get("view") === "settings") state.view = "settings";
+  if (p.get("prefs") && !p.get("invite") && !p.get("connect")) history.replaceState(null, "", location.pathname + location.search);
+})();
 // Friend invite links: #invite=<key>&api=<friends service> (the fragment never reaches any server).
 (function acceptInvite() {
   const p = new URLSearchParams(location.hash.slice(1));
@@ -3142,11 +3162,11 @@ addEventListener("hashchange", () => {
 });
 // "Sign in on another device" links carry the connection in the #fragment (never sent to any server).
 (function acceptDeviceLink() {
-  const m = /#connect=([A-Za-z0-9+/=]+)/.exec(location.hash);
-  if (!m) return;
+  const raw = new URLSearchParams(location.hash.slice(1)).get("connect");
+  if (!raw) return;
   try {
-    const j = JSON.parse(atob(m[1]));
-    if (j.o && j.r && j.t) saveConnection({ owner: j.o, repo: j.r, token: j.t });
+    const j = JSON.parse(atob(raw));
+    if (j.o && j.r && j.t && /^[\w.-]+$/.test(j.o) && /^[\w.-]+$/.test(j.r)) saveConnection({ owner: j.o, repo: j.r, token: j.t, branch: j.b || "main" });
   } catch { /* ignore a damaged link */ }
   history.replaceState(null, "", location.pathname + location.search);
 })();

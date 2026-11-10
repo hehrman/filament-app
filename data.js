@@ -9,6 +9,18 @@
 
 const API = "https://api.github.com";
 const CFG_KEY = "filament.connection.v1";
+// Filament moved to filament-nyc.com: the old address forwards here with #prefs=<this device's
+// Filament preferences>. Take the ones this device doesn't have yet. Never connection or cache.
+(function importPrefs() {
+  try {
+    const raw = new URLSearchParams(location.hash.slice(1)).get("prefs");
+    if (!raw) return;
+    const prefs = JSON.parse(decodeURIComponent(escape(atob(raw))));
+    for (const [k, v] of Object.entries(prefs)) {
+      if (/^filament\.[\w.]+$/.test(k) && !/^filament\.(connection\.v1|cache\.v1|local\.settings)$/.test(k) && typeof v === "string" && v.length < 20000 && localStorage.getItem(k) === null) localStorage.setItem(k, v);
+    }
+  } catch { /* a damaged link: start fresh */ }
+})();
 const CACHE_KEY = "filament.cache.v1";
 // The friends service (sign-up, sign-in links, feedback). Not personal data — just where the service lives.
 export const FRIENDS_API = "https://friends.filament-nyc.com";
