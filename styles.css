@@ -917,3 +917,4 @@ body { overscroll-behavior-y: contain; }
 @media (max-width: 480px) { .lb-connect--compact .lb-field__pre { display: none; } }
 .setup__picks .chip { font: 500 14px/1 var(--font); padding: 9px 12px; }
 @media (max-width: 420px) { .lb-connect:not(.lb-connect--compact) .lb-field { flex: none; } }
+.pick__why--2 { color: var(--text-3); margin-top: 2px; }

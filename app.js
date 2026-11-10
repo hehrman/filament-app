@@ -1,12 +1,12 @@
-import { creditIsDirector, fold, matchFilm, matchOccurrence } from "./match.js?v=20261109234551";
+import { creditIsDirector, fold, matchFilm, matchOccurrence, titleKey } from "./match.js?v=20261110000100";
 import {
   ApiError, FRIENDS_API, cached, emailSignIn, forgetConnection, isLocal, joinFilament, joinInfo, letterboxdFeed, loadAll, loadConnection,
   makeSource, mutateSettings, saveConnection,
-} from "./data.js?v=20261109234551";
-import { followList, forYou, importExport, lookup, lovedDirectors, mergeFeed, recentlyWatched, stars } from "./letterboxd.js?v=20261109234551";
+} from "./data.js?v=20261110000100";
+import { followList, forYou, importExport, lookup, lovedDirectors, mergeFeed, recentlyWatched, stars } from "./letterboxd.js?v=20261110000100";
 import {
   filmographyFor, searchCatalog, searchWikidataDirectors, searchWikidataFilms, slugFromCatalog,
-} from "./search.js?v=20261109234551";
+} from "./search.js?v=20261110000100";
 
 const TZ = "America/New_York";
 const app = document.getElementById("app");
@@ -355,14 +355,31 @@ function viewFind() {
       </div></div>`}`;
 }
 
-function forYouBlock() {
+// Suggestions: the daily check's taste model (history.for_you) when there is one,
+// otherwise the simpler on-device version until the next morning.
+function forYouPicks() {
   const l = lbData();
-  if (!l?.films || lbCfg().enabled === false) return "";
+  if (!l?.films || lbCfg().enabled === false) return [];
   const followed = (o) => matchOccurrence(o, interests()).length > 0;
-  const picks = forYou(Object.values(D().listings?.occurrences || {}), l, followed, todayISO(), lbCfg().recent_months);
+  const fy = D().history?.for_you;
+  if (fy?.picks?.length) {
+    const today = todayISO();
+    const occs = Object.values(D().listings?.occurrences || {}).filter((o) => o.date >= today && (o.status || "active") === "active");
+    return fy.picks.map((p) => {
+      const [tk, y] = p.key.split("|");
+      const same = (f) => titleKey(f.title) === tk && (!y || !f.year || Math.abs(Number(f.year) - Number(y)) <= 1);
+      const list = occs.filter((o) => !followed(o) && (o.films || []).some(same)).sort((a, b) => a.date.localeCompare(b.date));
+      if (!list.length) return null;
+      return { film: list[0].films.find(same), poster: list.find((o) => o.poster)?.poster, why: p.why[0] || "", why2: p.why[1] || "", occs: list };
+    }).filter(Boolean).slice(0, 14);
+  }
+  return forYou(Object.values(D().listings?.occurrences || {}), l, followed, todayISO(), lbCfg().recent_months);
+}
+function forYouBlock() {
+  const picks = forYouPicks();
   if (!picks.length) return "";
   return `<section class="foryou" aria-label="For you">
-    <div class="foryou__head"><div><div class="eyebrow">Based on your Letterboxd</div><h2 class="section-title">For you</h2></div></div>
+    <div class="foryou__head"><div><div class="eyebrow">Picked from your Letterboxd ratings</div><h2 class="section-title">For you</h2></div></div>
     <div class="foryou__rail">${picks.map((g) => {
       const o = g.occs[0];
       return `<article class="pick">
@@ -370,6 +387,7 @@ function forYouBlock() {
           <span class="pick__art">${posterImg(g.poster, "pick__poster")}</span>
           <span class="pick__title">${h(g.film.title)}</span>
           <span class="pick__why">${h(g.why)}</span>
+          ${g.why2 ? `<span class="pick__why pick__why--2">${h(g.why2)}</span>` : ""}
           <span class="pick__when"><b>${h(fmtDay(o.date, { weekday: "short", month: "short", day: "numeric" }))}</b> · ${h(o.venue)}${g.occs.length > 1 ? ` · +${g.occs.length - 1} more` : ""}</span>
         </button>
         <div class="pick__follow">${followButtons([g.film])}</div>
@@ -2113,7 +2131,7 @@ function bindWelcome() {
 applyTheme();
 // Instant launch & offline: cache the app itself (never your data).
 if ("serviceWorker" in navigator && !isLocal()) {
-  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261109234551").catch(() => {}));
+  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261110000100").catch(() => {}));
 }
 // Friend invite links: #invite=<key>&api=<friends service> (the fragment never reaches any server).
 (function acceptInvite() {
