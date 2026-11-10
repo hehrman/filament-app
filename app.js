@@ -1,12 +1,12 @@
-import { creditIsDirector, fold, matchFilm, matchOccurrence, titleKey } from "./match.js?v=20261110043825";
+import { creditIsDirector, fold, matchFilm, matchOccurrence, titleKey } from "./match.js?v=20261110044100";
 import {
   ApiError, FRIENDS_API, cached, emailSignIn, forgetConnection, isLocal, joinFilament, joinInfo, letterboxdFeed, loadAll, loadConnection,
   makeSource, mutateSettings, saveConnection,
-} from "./data.js?v=20261110043825";
-import { followList, forYou, importExport, lookup, lovedDirectors, mergeFeed, recentlyWatched, stars } from "./letterboxd.js?v=20261110043825";
+} from "./data.js?v=20261110044100";
+import { followList, forYou, importExport, lookup, lovedDirectors, mergeFeed, recentlyWatched, stars } from "./letterboxd.js?v=20261110044100";
 import {
   filmographyFor, searchCatalog, searchWikidataDirectors, searchWikidataFilms, slugFromCatalog,
-} from "./search.js?v=20261110043825";
+} from "./search.js?v=20261110044100";
 
 const TZ = "America/New_York";
 const app = document.getElementById("app");
@@ -1816,17 +1816,17 @@ function secretSearch(q) {
   const k = fold(q).replace(/[^a-z ]/g, "").replace(/\s+/g, " ").trim();
   if (k === lastSecret) return;
   lastSecret = k;
-  if (k === "damn fine coffee" || k === "damn fine cup of coffee") { flicker(); toast("And hot."); }
+  if (k === "damn fine coffee" || k === "damn fine cup of coffee") { flicker(); subtitle("And hot."); }
   else if (k === "the owls are not what they seem") {
     flicker();
     if (!reducedMotion()) { document.body.classList.add("owls"); setTimeout(() => document.body.classList.remove("owls"), 3200); }
   } else if (k === "gotta light") {
     document.querySelectorAll(".lamp").forEach((l, i) => setTimeout(() => blowLamp(l), i * 140));
   } else if (k === "asa nisi masa" || k === "8 and a half" || k === "otto e mezzo") {
-    toast("Asa Nisi Masa");
+    subtitle("Asa Nisi Masa");
     if (!reducedMotion()) overlay("ring", Array.from({ length: 12 }, (_, i) => `<span style="--i:${i}">${lamp("on")}</span>`).join(""), 6200);
   } else if (k === "la dolce vita") {
-    toast("Marcello, come here!");
+    subtitle("Marcello, come here!");
     if (!reducedMotion()) { document.body.classList.add("dolce"); setTimeout(() => document.body.classList.remove("dolce"), 5200); }
   } else if (k === "breathless" || k === "a bout de souffle") {
     if (!reducedMotion()) { document.body.classList.add("jumpcut"); setTimeout(() => document.body.classList.remove("jumpcut"), 1300); }
@@ -1851,42 +1851,42 @@ const EGGS = {
   // Robert Altman: overlapping dialogue and a slow zoom
   altman() {
     once("zoomin", 2600);
-    if (reducedMotion()) return toast("It’s OK with me.");
+    if (reducedMotion()) return subtitle("It’s OK with me.");
     overlay("altman", ["— no, wait, I was —", "It’s OK with me.", "— did you see the —", "— listen, listen —", "— anyway —"]
       .map((s, i) => `<span style="--i:${i}">${s}</span>`).join(""), 3600);
   },
   // Wong Kar-wai: step-printed smear, neon
-  wkw(msg) { once("wkw", 2400); if (msg) toast(msg); },
+  wkw(msg) { once("wkw", 2400); if (msg) subtitle(msg); },
   // Pedro Almodóvar: blocks of his reds, pinks and blues
   almodovar() {
-    if (reducedMotion()) return toast("¡Qué maravilla!");
+    if (reducedMotion()) return subtitle("¡Qué maravilla!");
     overlay("almodovar", ["#E4002B", "#FF5FA2", "#FFD100", "#1C4BD8", "#00A86B", "#E4002B"].map((c, i) => `<i style="--c:${c};--i:${i}"></i>`).join(""), 2600);
   },
   // Steven Spielberg: a bicycle across the moon
   moon() {
-    if (reducedMotion()) return toast("Phone home.");
+    if (reducedMotion()) return subtitle("Phone home.");
     overlay("moon", `<div class="moon"><svg class="bike" viewBox="0 0 120 60" fill="currentColor"><circle cx="22" cy="44" r="12" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="92" cy="44" r="12" fill="none" stroke="currentColor" stroke-width="3"/><path d="M22 44 45 22h28l19 22M45 22l12 22h-35M66 10l7 12" stroke="currentColor" stroke-width="3" fill="none"/><circle cx="58" cy="9" r="6"/><path d="M52 14c-4 6-3 12 4 14l10-1 3-12z"/><rect x="70" y="2" width="12" height="9" rx="3"/></svg></div>`, 4200);
   },
   jaws() {
-    toast("You’re gonna need a bigger boat.");
+    subtitle("You’re gonna need a bigger boat.");
     if (!reducedMotion()) overlay("fin", `<svg viewBox="0 0 60 40"><path d="M2 38C18 32 30 18 34 2c6 14 14 28 24 36z" fill="#3b4b57"/></svg>`, 5200);
   },
   // Bob Fosse: a single spotlight
   fosse() {
-    toast("It’s showtime, folks!");
+    subtitle("It’s showtime, folks!");
     if (!reducedMotion()) overlay("spot", "", 3800);
   },
   // Paul Thomas Anderson: it's raining frogs
   frogs() {
-    if (reducedMotion()) return toast("It did happen.");
+    if (reducedMotion()) return subtitle("It did happen.");
     overlay("frogs", Array.from({ length: 26 }, (_, i) => `<span style="--x:${(i * 37) % 100};--d:${(i * 173) % 1400}ms;--s:${0.7 + ((i * 7) % 6) / 10}">🐸</span>`).join(""), 4200);
   },
-  milkshake() { toast("I drink it up!"); flicker(); },
+  milkshake() { subtitle("I drink it up!"); flicker(); },
   // Spike Lee: the double-dolly glide; the hottest day of the summer
   dolly() { once("dolly", 2600); },
-  heat() { toast("Wake up!"); once("heat", 4200); },
+  heat() { subtitle("Wake up!"); once("heat", 4200); },
   // The Wizard of Oz: sepia, then Technicolor
-  oz() { toast("There’s no place like home."); once("oz", 3400); },
+  oz() { subtitle("There’s no place like home."); once("oz", 3400); },
 };
 const EGG_WORDS = {
   "robert altman": EGGS.altman, "altman": EGGS.altman, "nashville": EGGS.altman, "the long goodbye": EGGS.altman, "mccabe and mrs miller": EGGS.altman, "mccabe mrs miller": EGGS.altman,
@@ -1896,13 +1896,13 @@ const EGG_WORDS = {
   "almodovar": EGGS.almodovar, "pedro almodovar": EGGS.almodovar, "all about my mother": EGGS.almodovar, "todo sobre mi madre": EGGS.almodovar,
   "volver": EGGS.almodovar, "women on the verge of a nervous breakdown": EGGS.almodovar, "talk to her": EGGS.almodovar,
   "spielberg": EGGS.moon, "steven spielberg": EGGS.moon, "phone home": EGGS.moon, "et phone home": EGGS.moon, "et the extraterrestrial": EGGS.moon,
-  "jaws": EGGS.jaws, "close encounters of the third kind": () => { toast("Re · Mi · Do · Do · Sol"); flicker(); },
+  "jaws": EGGS.jaws, "close encounters of the third kind": () => { subtitle("Re · Mi · Do · Do · Sol"); flicker(); },
   "fosse": EGGS.fosse, "bob fosse": EGGS.fosse, "all that jazz": EGGS.fosse, "cabaret": EGGS.fosse, "razzle dazzle": EGGS.fosse, "sweet charity": EGGS.fosse,
   "paul thomas anderson": EGGS.frogs, "magnolia": EGGS.frogs, "there will be blood": EGGS.milkshake, "i drink your milkshake": EGGS.milkshake,
-  "boogie nights": () => { toast("You’re a star."); flicker(); }, "punch drunk love": () => once("pdl", 3600), "punchdrunk love": () => once("pdl", 3600), "phantom thread": () => toast("Kiss me, my girl, before I’m sick."),
+  "boogie nights": () => { subtitle("You’re a star."); flicker(); }, "punch drunk love": () => once("pdl", 3600), "punchdrunk love": () => once("pdl", 3600), "phantom thread": () => subtitle("Kiss me, my girl, before I’m sick."),
   "spike lee": EGGS.dolly, "double dolly": EGGS.dolly, "malcolm x": EGGS.dolly, "do the right thing": EGGS.heat, "wake up": EGGS.heat,
   "wizard of oz": EGGS.oz, "the wizard of oz": EGGS.oz, "theres no place like home": EGGS.oz, "no place like home": EGGS.oz,
-  "over the rainbow": EGGS.oz, "ruby slippers": EGGS.oz, "follow the yellow brick road": () => { toast("Follow the yellow brick road."); once("brick", 3200); },
+  "over the rainbow": EGGS.oz, "ruby slippers": EGGS.oz, "follow the yellow brick road": () => { subtitle("Follow the yellow brick road."); once("brick", 3200); },
 };
 // Quiet triggers outside search:
 // · Oz — tap Upcoming three times quickly ("there's no place like home")
@@ -1934,6 +1934,16 @@ function followEgg(name) {
   }, { passive: true });
 })();
 
+// Hidden lines play like a film: letterbox bars glide in, the line appears as a subtitle.
+function subtitle(text) {
+  document.querySelector(".egg--sub")?.remove();
+  const o = document.createElement("div");
+  o.className = `egg egg--sub${reducedMotion() ? " egg--still" : ""}`;
+  o.setAttribute("role", "status");
+  o.innerHTML = `<i class="bar bar--top"></i><p>${h(text)}</p><i class="bar bar--bottom"></i>`;
+  document.body.append(o);
+  setTimeout(() => o.remove(), 3400);
+}
 function overlay(cls, html, ms) {
   const o = document.createElement("div");
   o.className = `egg egg--${cls}`;
@@ -2428,7 +2438,7 @@ function bindWelcome() {
 applyTheme();
 // Instant launch & offline: cache the app itself (never your data).
 if ("serviceWorker" in navigator && !isLocal()) {
-  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261110043825").catch(() => {}));
+  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261110044100").catch(() => {}));
 }
 // Friend invite links: #invite=<key>&api=<friends service> (the fragment never reaches any server).
 (function acceptInvite() {
