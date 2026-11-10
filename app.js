@@ -1,12 +1,12 @@
-import { creditIsDirector, fold, matchFilm, matchOccurrence, titleKey } from "./match.js?v=20261110042501";
+import { creditIsDirector, fold, matchFilm, matchOccurrence, titleKey } from "./match.js?v=20261110043250";
 import {
   ApiError, FRIENDS_API, cached, emailSignIn, forgetConnection, isLocal, joinFilament, joinInfo, letterboxdFeed, loadAll, loadConnection,
   makeSource, mutateSettings, saveConnection,
-} from "./data.js?v=20261110042501";
-import { followList, forYou, importExport, lookup, lovedDirectors, mergeFeed, recentlyWatched, stars } from "./letterboxd.js?v=20261110042501";
+} from "./data.js?v=20261110043250";
+import { followList, forYou, importExport, lookup, lovedDirectors, mergeFeed, recentlyWatched, stars } from "./letterboxd.js?v=20261110043250";
 import {
   filmographyFor, searchCatalog, searchWikidataDirectors, searchWikidataFilms, slugFromCatalog,
-} from "./search.js?v=20261110042501";
+} from "./search.js?v=20261110043250";
 
 const TZ = "America/New_York";
 const app = document.getElementById("app");
@@ -705,6 +705,12 @@ function viewSettings() {
       ? `<button class="row row--link" data-action="lb-start">${LB_MARK}<div class="row__main"><div class="row__title">${h(lbCfg().username || "Letterboxd")}</div><div class="row__sub">Connected</div></div><span aria-hidden="true">›</span></button>`
       : isLocal() ? "" : `<button class="row row--link" data-action="lb-start">${LB_MARK}<div class="row__main"><div class="row__title">Connect Letterboxd</div><div class="row__sub">Your favorites followed automatically</div></div><span aria-hidden="true">›</span></button>`}</div>
 
+    <h2 class="settings-section">At the theater</h2>
+    <div class="group">
+      ${row("Where you like to sit", "", `<div class="seg">${SEAT_ROWS.map(([k, l]) => `<button data-action="seatpref" data-k="row" data-v="${k}" aria-pressed="${(s.seat_pref || {}).row === k}">${l}</button>`).join("")}</div>`)}
+      ${row("Seat", "Shown when you open a theater’s seat map", `<div class="seg">${SEAT_SIDES.map(([k, l]) => `<button data-action="seatpref" data-k="side" data-v="${k}" aria-pressed="${(s.seat_pref || {}).side === k}">${l}</button>`).join("")}</div>`)}
+    </div>
+
     ${isFriend() ? `<h2 class="settings-section">Feedback</h2>${feedbackRow().replace('<div class="group-label">Feedback</div>', "")}` : ""}
     ${owner ? `<h2 class="settings-section">Friends</h2>${friendsBlock().replace('<div class="group-label">Friends</div>', "")}${feedbackInbox()}` : ""}
 
@@ -985,7 +991,6 @@ function openSheet(key) {
         <div class="card__meta">${h(meta)}</div>
         </div></div>
       </div>
-      ${goingLine(d.key) ? `<div class="sheet__section going-line">${h(goingLine(d.key))}</div>` : ""}
       <div class="sheet__section ww">
         <div class="ww__when"><b>${h(rel || fmtDay(d.date, { weekday: "long" }))}</b> <span>${h(fmtDay(d.date, rel ? { weekday: "long", month: "long", day: "numeric" } : { month: "long", day: "numeric", year: "numeric" }))}</span></div>
         <div class="ww__times">${(d.showtimes?.length ? d.showtimes : [null]).map((t) => `<button class="time time--btn" data-action="ics" data-key="${h(d.key)}" data-time="${h(t || "")}" aria-label="Add ${h(t || "this screening")} to your calendar">${h(t || "Time TBA")} ${ICON.calendar}</button>`).join("")}</div>
@@ -1001,7 +1006,10 @@ function openSheet(key) {
         <button class="btn" data-action="share" data-key="${h(d.key)}">${ICON.share} Share</button>
         <a class="btn" href="${h(letterboxdURL(d.films[0]))}" target="_blank" rel="noopener">Letterboxd</a>
         <a class="btn" href="${h(d.film_url || d.listing_url)}" target="_blank" rel="noopener">Full listing</a>
-      </div></div>
+      </div>${d.ticket_url && seatHint() ? `<div class="seat-hint">${h(seatHint())}</div>` : ""}</div>
+      ${goingLine(d.key) ? `<div class="sheet__section going-line">${h(goingLine(d.key))}</div>` : ""}
+      ${imGoing(d.key) ? `<div class="sheet__section seats-row"><form class="seats-form" data-key="${h(d.key)}"><input id="going-seats" name="seats" maxlength="24" placeholder="Your seats, e.g. G7–G8" value="${h(mySeats(d.key))}" aria-label="Your seats" autocomplete="off"><button class="btn btn--sm">Save</button></form>
+        <div class="ww__hint">Friends going too will see where you’re sitting.</div></div>` : ""}
       ${facts.length ? `<div class="sheet__section"><dl class="facts">${facts.map(([k, v]) => `<dt>${h(k)}</dt><dd>${h(v).replace(/\n/g, "<br>")}</dd>`).join("")}</dl></div>` : ""}
       <div class="sheet__section"><div class="group-label" style="margin-top:0">Follow</div><div class="actions">${followButtons(d.films)}</div></div>
       ${evs.length || d.first_listed ? `<div class="sheet__section">${wireEl()}<div class="group-label" style="margin-top:14px">History</div><ul class="timeline">
@@ -1064,32 +1072,49 @@ function goingLine(key, short) {
   const me = list.some((g) => g.id === myGoingId());
   const others = list.filter((g) => g.id !== myGoingId()).map((g) => g.name);
   if (short) return me ? (others.length ? `You + ${others.length} going` : "You’re going") : others.length === 1 ? `${others[0]} is going` : `${others[0]} + ${others.length - 1} going`;
-  const names = [...(me ? ["You"] : []), ...others];
-  return names.length === 1 ? (me ? "You’re going" : `${names[0]} is going`) : `${names.slice(0, -1).join(", ")} and ${names.at(-1)} are going`;
+  const seat = (g) => (g.seats ? ` (${g.seats})` : "");
+  const mine = list.find((g) => g.id === myGoingId());
+  const names = [...(me ? [`You${seat(mine)}`] : []), ...list.filter((g) => g.id !== myGoingId()).map((g) => `${g.name}${seat(g)}`)];
+  return names.length === 1 ? (me ? `You’re going${seat(mine)}` : `${names[0]} is going`) : `${names.slice(0, -1).join(", ")} and ${names.at(-1)} are going`;
+}
+async function saveGoing(key, on, seats = "") {
+  const name = isFriend() ? (state.src.name || "Friend").split(" ")[0] : (settings().owner_name || "Owner");
+  const clean = String(seats || "").replace(/[^\w\s,–-]/g, "").trim().slice(0, 24);
+  const entry = { id: myGoingId(), name, at: new Date().toISOString(), ...(clean ? { seats: clean } : {}) };
+  const apply = (doc) => {
+    doc.going = doc.going || {};
+    const list = (doc.going[key] || []).filter((g) => g.id !== myGoingId());
+    if (on) list.push(entry);
+    if (list.length) doc.going[key] = list; else delete doc.going[key];
+    return doc;
+  };
+  state.data = { ...state.data, going: apply(structuredClone(D().going || { going: {} })) };
+  reopenSheet(); render();
+  try {
+    if (isFriend()) await state.src.setGoing(key, on, clean);
+    else if (!isLocal()) {
+      const fresh = apply((await state.src.readFile("going.json")) || { going: {} });
+      await state.src.writeFile("going.json", fresh, `${name}: ${on ? "going" : "not going"}`);
+    }
+    return true;
+  } catch (e) { toast(`Couldn’t save: ${e.message}`); return false; }
 }
 async function toggleGoing(key) {
   const on = !imGoing(key);
-  const name = isFriend() ? (state.src.name || "Friend").split(" ")[0] : (settings().owner_name || "Owner");
-  const doc = structuredClone(D().going || { going: {} });
-  doc.going = doc.going || {};
-  const list = (doc.going[key] || []).filter((g) => g.id !== myGoingId());
-  if (on) list.push({ id: myGoingId(), name, at: new Date().toISOString() });
-  if (list.length) doc.going[key] = list; else delete doc.going[key];
-  state.data = { ...state.data, going: doc };
-  reopenSheet(); render();
-  try {
-    if (isFriend()) await state.src.setGoing(key, on);
-    else if (!isLocal()) {
-      const fresh = (await state.src.readFile("going.json")) || { going: {} };
-      fresh.going = fresh.going || {};
-      const l2 = (fresh.going[key] || []).filter((g) => g.id !== "owner");
-      if (on) l2.push({ id: "owner", name, at: new Date().toISOString() });
-      if (l2.length) fresh.going[key] = l2; else delete fresh.going[key];
-      await state.src.writeFile("going.json", fresh, `${name}: ${on ? "going" : "not going"}`);
-    }
-    toast(on ? "You’re going. Friends who follow this will see it." : "Not going");
-  } catch (e) { toast(`Couldn’t save: ${e.message}`); }
+  if (await saveGoing(key, on)) toast(on ? "You’re going. Add your seats once you’ve booked, so friends can sit nearby." : "Not going");
 }
+const mySeats = (key) => goingFor(key).find((g) => g.id === myGoingId())?.seats || "";
+// Where you like to sit (synced with your settings)
+const SEAT_ROWS = [["front", "Front"], ["middle", "Middle"], ["back", "Back"]];
+const SEAT_SIDES = [["aisle", "Aisle"], ["center", "Center"], ["any", "Either"]];
+function seatHint() {
+  const p = settings().seat_pref || {};
+  if (!p.row && !p.side) return "";
+  const row = { front: "near the front", middle: "in the middle", back: "near the back" }[p.row] || "";
+  const side = { aisle: "on the aisle", center: "in the center" }[p.side] || "";
+  return `You like to sit ${[row, side].filter(Boolean).join(", ")}`;
+}
+
 function askCheck() {
   const t = fmtTime12((settings().schedule?.times || ["09:00"])[0]);
   sheetRoot.innerHTML = `<div class="scrim" data-action="close-sheet"></div>
@@ -1298,7 +1323,14 @@ async function connectLetterboxd(raw) {
     toast(`Connected${feed.name ? ` as ${feed.name}` : ""}. following ${plural(n, "film")} from your diary so far`);
   } catch (e) { Object.assign(state, { lbBusy: false, lbError: e.message }); render(); }
 }
-document.addEventListener("submit", (ev) => {
+document.addEventListener("submit", async (ev) => {
+  const sf = ev.target.closest?.(".seats-form");
+  if (sf) {
+    ev.preventDefault();
+    const seats = new FormData(sf).get("seats");
+    if (await saveGoing(sf.dataset.key, true, seats)) toast(seats ? "Seats saved. Friends going will see them." : "Seats cleared");
+    return;
+  }
   const f = ev.target.closest?.(".lb-connect");
   if (!f) return;
   ev.preventDefault();
@@ -2120,6 +2152,7 @@ async function onAction(el, ev) {
   if (a === "fb-kind") { el.parentElement.querySelectorAll("button").forEach((b) => { const on = b === el; b.setAttribute("aria-pressed", on); b.setAttribute("aria-checked", on); }); return; }
   if (a === "fb-done") return feedbackDone(el.dataset.id);
   if (a === "going") return toggleGoing(el.dataset.key);
+  if (a === "seatpref") return saveSettings((s) => { s.seat_pref = { ...(s.seat_pref || {}), [el.dataset.k]: el.dataset.v }; }, "Seat preference", "Saved");
   if (a === "order") {
     try { localStorage.setItem("filament.order", el.dataset.v); } catch { /* ignore */ }
     if (el.dataset.v === "nearest") locate();
@@ -2375,7 +2408,7 @@ function bindWelcome() {
 applyTheme();
 // Instant launch & offline: cache the app itself (never your data).
 if ("serviceWorker" in navigator && !isLocal()) {
-  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261110042501").catch(() => {}));
+  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261110043250").catch(() => {}));
 }
 // Friend invite links: #invite=<key>&api=<friends service> (the fragment never reaches any server).
 (function acceptInvite() {

@@ -1072,3 +1072,15 @@ body { overscroll-behavior-y: contain; }
 /* Recent searches: plain label */
 .recents > span:first-child { font: 500 13px/1 var(--font); letter-spacing: 0; text-transform: none; color: var(--text-3); }
 .console { overflow: visible; border-radius: 0; }
+
+/* Seats */
+.seat-hint { margin-top: 10px; font-size: 14px; color: var(--brass-hi); }
+.seats-row { padding-top: 0; }
+.seats-form { display: flex; gap: 8px; }
+.seats-form input { flex: 1; min-width: 0; height: 40px; border-radius: 10px; border: 1px solid var(--line-2); background: var(--bg); color: var(--text); padding: 0 12px; font-size: 16px; }
+.seats-form input:focus { outline: none; border-color: var(--brass); }
+
+/* Cards: the poster fills the card's height (no empty space under it), and is bigger */
+.card__body { align-items: center; gap: 18px; }
+.card__poster { width: 112px; border-radius: 8px; align-self: stretch; height: auto; min-height: 168px; max-height: 190px; object-fit: cover; }
+@media (max-width: 860px) { .card__poster { width: 100px; min-height: 150px; max-height: 172px; } .card__body { gap: 16px; padding: 14px 16px 14px 14px; } }
