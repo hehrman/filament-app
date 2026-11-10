@@ -3,25 +3,17 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex">
 <title>Filament</title>
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob: https:; media-src 'self'; connect-src 'self' https://api.github.com https://friends.filament-nyc.com https://*.workers.dev https://query.wikidata.org https://www.wikidata.org https://commons.wikimedia.org; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
-<meta name="referrer" content="strict-origin-when-cross-origin">
-<meta name="description" content="Tell Filament the films and directors you love. Get a notification or email the moment one is playing in New York.">
-<meta name="theme-color" content="#120F0C" media="(prefers-color-scheme: dark)">
-<meta name="theme-color" content="#F2ECE1" media="(prefers-color-scheme: light)">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Filament">
-<link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="preload" href="jost.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="styles.css?v=20261110172039">
+<style>html,body{margin:0;height:100%;background:#120F0C;color:#B3A893;font:15px -apple-system,BlinkMacSystemFont,"Helvetica Neue",Arial,sans-serif;display:grid;place-items:center}
+@media (prefers-color-scheme: light){html,body{background:#F2ECE1;color:#6F665A}}a{color:inherit}</style>
 </head>
 <body>
-<div id="app" class="app" aria-live="polite"></div>
-<div id="sheet-root"></div>
-<div id="toast-root" class="toasts" role="status" aria-live="polite"></div>
-<script type="module" src="app.js?v=20261110172039"></script>
+<p id="msg">Opening Filament…</p>
+<script src="bridge.js"></script>
 </body>
 </html>
