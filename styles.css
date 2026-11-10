@@ -918,3 +918,49 @@ body { overscroll-behavior-y: contain; }
 .setup__picks .chip { font: 500 14px/1 var(--font); padding: 9px 12px; }
 @media (max-width: 420px) { .lb-connect:not(.lb-connect--compact) .lb-field { flex: none; } }
 .pick__why--2 { color: var(--text-3); margin-top: 2px; }
+
+/* ------------------------------------------------ more auteurs (eggs) */
+.zoomin .main { animation: altman-zoom 2.6s ease-in-out both; transform-origin: 50% 30%; }
+@keyframes altman-zoom { 50% { transform: scale(1.06); } }
+.egg--altman span { position: absolute; left: calc(12% + var(--i) * 14%); top: calc(22% + (var(--i) * 37 % 50) * 1%);
+  background: var(--surface); color: var(--text); border: 1px solid var(--line-2); border-radius: 16px; padding: 8px 12px; font-size: 14px;
+  box-shadow: 0 6px 24px rgb(0 0 0 / .35); animation: chatter 3.6s ease both calc(var(--i) * 140ms); white-space: nowrap; }
+@keyframes chatter { 0% { opacity: 0; transform: translateY(8px) scale(.96); } 12%, 80% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+.wkw .app, .wkw .tabbar { animation: wkw-smear 2.4s steps(7, end) both; }
+@keyframes wkw-smear {
+  0% { filter: none; } 20% { filter: blur(2.5px) saturate(1.8) hue-rotate(-25deg) contrast(1.15); transform: translateX(-3px); }
+  45% { filter: blur(1.2px) saturate(2) hue-rotate(35deg); transform: translateX(4px); } 70% { filter: blur(2px) saturate(1.6) hue-rotate(-10deg); transform: translateX(-2px); }
+  100% { filter: none; transform: none; } }
+.egg--almodovar { display: block; }
+.egg--almodovar i { position: absolute; top: 0; bottom: 0; width: 17%; left: calc(var(--i) * 16.6%); background: var(--c);
+  transform: scaleY(0); transform-origin: calc(var(--i) * 20%) 0; animation: blocks 2.6s cubic-bezier(.7,0,.2,1) both calc(var(--i) * 60ms); }
+@keyframes blocks { 18%, 62% { transform: scaleY(1); } 100% { transform: scaleY(0); transform-origin: 50% 100%; } }
+.egg--moon { background: rgb(5 8 20 / .55); animation: ring-life 4.2s ease both; }
+.moon { width: min(70vw, 340px); aspect-ratio: 1; border-radius: 50%; background: radial-gradient(circle at 40% 40%, #fbf6e6, #e7dcc0 60%, #cbbd99);
+  box-shadow: 0 0 80px 20px rgb(255 248 220 / .35); position: relative; overflow: visible; }
+.bike { position: absolute; width: 38%; color: #050810; top: 40%; left: -60%; animation: ride 4.2s cubic-bezier(.4,.1,.6,.9) both; }
+@keyframes ride { 0% { left: -60%; top: 62%; } 100% { left: 120%; top: 18%; } }
+.egg--fin { place-items: end start; }
+.egg--fin svg { width: 70px; margin-bottom: 70px; animation: fin 5.2s ease-in-out both; }
+@keyframes fin { 0% { transform: translateX(-90px); } 100% { transform: translateX(calc(100vw + 40px)); } }
+.egg--spot { background: radial-gradient(circle at 50% 42%, transparent 0 120px, rgb(0 0 0 / .86) 220px); animation: ring-life 3.8s ease both; }
+.egg--frogs { display: block; overflow: hidden; }
+.egg--frogs span { position: absolute; top: -40px; left: calc(var(--x) * 1%); font-size: calc(28px * var(--s)); animation: rain 2.4s cubic-bezier(.5,0,1,1) var(--d) both; }
+@keyframes rain { to { transform: translateY(calc(100vh + 80px)) rotate(200deg); } }
+.dolly .main { animation: dolly 2.6s cubic-bezier(.45,0,.2,1) both; }
+@keyframes dolly { 0% { transform: none; } 55% { transform: translateY(-26px) scale(1.035); } 100% { transform: none; } }
+.heat .app { animation: heat 4.2s ease both; }
+@keyframes heat { 30%, 70% { filter: sepia(.45) saturate(1.7) hue-rotate(-12deg) brightness(1.06); } }
+.oz .app, .oz .tabbar { animation: oz 3.4s ease both; }
+@keyframes oz { 0%, 38% { filter: sepia(1) saturate(.8) contrast(1.05); } 52% { filter: saturate(2.6) contrast(1.1) brightness(1.08); } 100% { filter: none; } }
+.pdl .app { animation: pdl 3.6s ease-in-out both; }
+@keyframes pdl { 25% { filter: hue-rotate(160deg) saturate(1.8); } 60% { filter: hue-rotate(-40deg) saturate(2) brightness(1.1); } }
+.brick .wire { color: #F2C230 !important; filter: drop-shadow(0 0 6px #F2C230); transition: filter .4s; }
+@media (prefers-reduced-motion: reduce) { .egg--altman span, .egg--almodovar i, .bike, .egg--fin svg, .egg--frogs span { animation: none; } }
+.egg--altman span { left: auto; top: auto; }
+.egg--altman span:nth-child(1) { left: 6%; top: 22%; }
+.egg--altman span:nth-child(2) { right: 7%; top: 31%; }
+.egg--altman span:nth-child(3) { left: 12%; top: 43%; }
+.egg--altman span:nth-child(4) { right: 4%; top: 53%; }
+.egg--altman span:nth-child(5) { left: 28%; top: 64%; }
+.egg--fin svg { margin-bottom: max(130px, calc(env(safe-area-inset-bottom) + 120px)); }
