@@ -1,12 +1,12 @@
-import { creditIsDirector, fold, matchFilm, matchOccurrence, titleKey } from "./match.js?v=20261110020228";
+import { creditIsDirector, fold, matchFilm, matchOccurrence, titleKey } from "./match.js?v=20261110030726";
 import {
   ApiError, FRIENDS_API, cached, emailSignIn, forgetConnection, isLocal, joinFilament, joinInfo, letterboxdFeed, loadAll, loadConnection,
   makeSource, mutateSettings, saveConnection,
-} from "./data.js?v=20261110020228";
-import { followList, forYou, importExport, lookup, lovedDirectors, mergeFeed, recentlyWatched, stars } from "./letterboxd.js?v=20261110020228";
+} from "./data.js?v=20261110030726";
+import { followList, forYou, importExport, lookup, lovedDirectors, mergeFeed, recentlyWatched, stars } from "./letterboxd.js?v=20261110030726";
 import {
   filmographyFor, searchCatalog, searchWikidataDirectors, searchWikidataFilms, slugFromCatalog,
-} from "./search.js?v=20261110020228";
+} from "./search.js?v=20261110030726";
 
 const TZ = "America/New_York";
 const app = document.getElementById("app");
@@ -968,6 +968,8 @@ const EVENT_TEXT = {
   removed: () => "Disappeared from the listings",
   reappeared: () => "Reappeared in the listings",
 };
+// Theaters with assigned seats: the ticket page is where you see the live seat map.
+const ticketLabel = (d) => /drafthouse\.com|metrograph\.com|nitehawkcinema\.com/.test(d.ticket_url || "") ? "See seats & tickets" : "Tickets";
 const venueInfo = (d) => D().catalog?.venues?.[d.venue_slug] || null;
 function openSheet(key) {
   const d = findItem(key);
@@ -1010,7 +1012,7 @@ function openSheet(key) {
         <a class="ww__venue" href="${h(maps)}" target="_blank" rel="noopener"><span class="ww__vname">${h(d.venue)}</span>${addr ? `<span class="ww__addr">${h(addr)}</span>` : ""}<span class="ww__dir">Directions ›</span></a>
       </div>
       <div class="sheet__section"><div class="actions">
-        ${d.ticket_url ? `<a class="btn btn--brass" href="${h(d.ticket_url)}" target="_blank" rel="noopener">Tickets</a>` : ""}
+        ${d.ticket_url ? `<a class="btn btn--brass" href="${h(d.ticket_url)}" target="_blank" rel="noopener">${ticketLabel(d)}</a>` : ""}
         <button class="btn" data-action="share" data-key="${h(d.key)}">${ICON.share} Share</button>
         <a class="btn" href="${h(letterboxdURL(d.films[0]))}" target="_blank" rel="noopener">Letterboxd</a>
         <a class="btn" href="${h(d.film_url || d.listing_url)}" target="_blank" rel="noopener">Full listing</a>
@@ -1120,12 +1122,13 @@ function openMenu(el, x, y) {
     ["open", "Details", ""],
     ["ics", `Add to Calendar${d.showtimes?.[0] ? ` · ${d.showtimes[0]}` : ""}`, ""],
     ["share", "Share", ""],
-    d.ticket_url ? ["tickets", "Tickets", ""] : null,
+    d.ticket_url ? ["tickets", ticketLabel(d), ""] : null,
     ["maps", "Directions", ""],
     credit && !isFollowingCredit(credit) ? ["follow", `Follow ${credit.name}`, ""] : null,
   ].filter(Boolean);
   const m = document.createElement("div");
   m.className = "ctx";
+  m.dataset.y = String(scrollY);
   m.setAttribute("role", "menu");
   m.innerHTML = `<div class="ctx__title">${h(f.title)}<span>${h(fmtDay(d.date, { weekday: "short", month: "short", day: "numeric" }))} · ${h(d.venue)}</span></div>` +
     items.map(([a, l]) => `<button role="menuitem" data-ctx="${a}">${h(l)}</button>`).join("");
@@ -1174,7 +1177,8 @@ function openMenu(el, x, y) {
     if (!e.target.closest(".ctx")) closeMenu();
   }, true);
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMenu(); });
-  addEventListener("scroll", closeMenu, { passive: true });
+  // close on a real scroll, not the tiny nudges phones (and smooth scrolling) make
+  addEventListener("scroll", () => { const m = document.querySelector(".ctx"); if (m && Math.abs(scrollY - (Number(m.dataset.y) || 0)) > 24) closeMenu(); }, { passive: true });
 })();
 
 /* ------------------------------------------------------------- share */
@@ -2297,7 +2301,7 @@ function bindWelcome() {
 applyTheme();
 // Instant launch & offline: cache the app itself (never your data).
 if ("serviceWorker" in navigator && !isLocal()) {
-  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261110020228").catch(() => {}));
+  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261110030726").catch(() => {}));
 }
 // Friend invite links: #invite=<key>&api=<friends service> (the fragment never reaches any server).
 (function acceptInvite() {

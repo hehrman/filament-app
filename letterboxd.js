@@ -1,7 +1,7 @@
 // Letterboxd in the app: read an export .zip on-device, decide which films are
 // followed automatically, mark films you've seen, and suggest "For you".
 // Mirrors monitor/letterboxd.py (same keys, same thresholds, same aliases).
-import { fold, nameKey, titleKey } from "./match.js?v=20261110020228";
+import { fold, nameKey, titleKey } from "./match.js?v=20261110030726";
 
 export const filmKey = (title, year) => `${titleKey(title)}|${year || ""}`;
 
