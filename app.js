@@ -1,12 +1,12 @@
-import { creditIsDirector, fold, matchFilm, matchOccurrence, titleKey } from "./match.js?v=20261110152124";
+import { creditIsDirector, fold, matchFilm, matchOccurrence, titleKey } from "./match.js?v=20261110155240";
 import {
   ApiError, FRIENDS_API, cached, emailSignIn, forgetConnection, isLocal, joinFilament, joinInfo, letterboxdFeed, loadAll, loadConnection,
   makeSource, mutateSettings, saveConnection,
-} from "./data.js?v=20261110152124";
-import { followList, forYou, importExport, lookup, lovedDirectors, mergeFeed, recentlyWatched, stars } from "./letterboxd.js?v=20261110152124";
+} from "./data.js?v=20261110155240";
+import { followList, forYou, importExport, lookup, lovedDirectors, mergeFeed, recentlyWatched, stars } from "./letterboxd.js?v=20261110155240";
 import {
   filmographyFor, searchCatalog, searchWikidataDirectors, searchWikidataFilms, slugFromCatalog,
-} from "./search.js?v=20261110152124";
+} from "./search.js?v=20261110155240";
 
 const TZ = "America/New_York";
 const app = document.getElementById("app");
@@ -971,17 +971,17 @@ function render() {
     <aside class="rail">
       <a class="wordmark" href="#" data-action="nav" data-view="upcoming">${lamp(lampState)}<span class="wordmark__type">Filament</span></a>
       ${wireEl()}
-      <nav class="nav" aria-label="Sections" style="--i:${NAV.findIndex(([k]) => k === navOf(state.prevView || state.view))}"><span class="nav-pill" aria-hidden="true"></span>${NAV.map(([k, l, i]) => `<button class="nav__item" data-action="nav" data-view="${k}" ${navOf(state.view) === k ? 'aria-current="page"' : ""}>${i}<span>${l}</span><span class="nav__count">${counts[k] ?? ""}</span></button>`).join("")}</nav>
+      <nav class="nav" aria-label="Sections" style="--i:${NAV.findIndex(([k]) => k === navOf(state.prevView || state.view))}"><span class="nav-pill" aria-hidden="true"></span>${NAV.map(([k, l, i]) => `<button class="nav__item" data-action="nav" data-view="${k}" ${navOf(state.view) === k ? 'aria-current="page"' : ""}>${i}<span>${l}</span><span class="nav__count">${counts[k] ?? ""}</span>${k === "friends" && lobbyUnread() ? `<i class="tab__glow" aria-label="New in the Lobby"></i>` : ""}</button>`).join("")}</nav>
       <div class="rail__foot">${isFriend() ? "" : `<button class="rail__help${state.running ? " icon-btn--busy" : ""}" data-action="check-ask">${ICON.check}<span>${state.running ? "Checking…" : "Check now…"}</span></button>`}<button class="rail__help" data-action="nav" data-view="help">${ICON.info}<span>About & Help</span></button>Watching New York’s screening calendar.<br>${state.data ? `Next check ${h(fmtWhen(nextCheckISO()))}.` : ""}</div>
     </aside>
     <main class="main${state.enter ? " main--enter" : ""}" id="main">
       <div class="topbar"><span class="wordmark">${lamp(lampState)}<span class="wordmark__type">Filament</span></span>
-        <span class="topbar__title" aria-hidden="true">${h({ upcoming: "Upcoming", watch: "Following", friends: "Friends", settings: "Settings", help: "About & Help" }[state.view])}</span>
+        <span class="topbar__title" aria-hidden="true">${h(state.view === "friends" && state.room && ROOMS[state.room] ? ROOMS[state.room][0] : { upcoming: "Upcoming", watch: "Following", friends: "Friends", settings: "Settings", help: "About & Help" }[state.view])}</span>
         <span class="topbar__actions"><button class="icon-btn" data-action="nav" data-view="help" aria-label="About & Help">${ICON.info}</button>${isFriend() ? `<button class="icon-btn" data-action="reload" aria-label="Refresh">${ICON.refresh}</button>` : `<button class="icon-btn${state.running ? " icon-btn--busy" : ""}" data-action="check-ask" aria-label="Check for new screenings now">${ICON.check}</button>`}</span></div>
       ${state.error ? `<div class="console__error" style="margin:0 0 18px">${h(state.error)}</div>` : ""}
       ${view}
     </main>
-    <nav class="tabbar" aria-label="Sections" style="--i:${NAV.findIndex(([k]) => k === navOf(state.prevView || state.view))}"><span class="tab-pill" aria-hidden="true"></span>${NAV.map(([k, l, i]) => `<button class="tab" data-action="nav" data-view="${k}" ${(state.view === "help" ? "settings" : state.view) === k ? 'aria-current="page"' : ""}>${i}<span>${l}</span></button>`).join("")}</nav>`);
+    <nav class="tabbar" aria-label="Sections" style="--i:${NAV.findIndex(([k]) => k === navOf(state.prevView || state.view))}"><span class="tab-pill" aria-hidden="true"></span>${NAV.map(([k, l, i]) => `<button class="tab" data-action="nav" data-view="${k}" ${(state.view === "help" ? "settings" : state.view) === k ? 'aria-current="page"' : ""}>${i}<span>${l}</span>${k === "friends" && lobbyUnread() ? `<i class="tab__glow" aria-label="New in the Lobby"></i>` : ""}</button>`).join("")}</nav>`);
   if (active && !kept) {
     const el = document.getElementById(active);
     if (el) { el.focus(); try { el.setSelectionRange(caret, caret); } catch { /* not a text input */ } }
@@ -1037,6 +1037,22 @@ const EVENT_TEXT = {
 };
 // Theaters with assigned seats: the ticket page is where you see the live seat map.
 const ticketLabel = (d) => /drafthouse\.com|metrograph\.com|nitehawkcinema\.com/.test(d.ticket_url || "") ? "See seats & tickets" : "Tickets";
+/* How seats work at each theater. From the theaters themselves or people who go:
+   Film Forum, Roxy, Film at Lincoln Center (owner, Nov 2026); IFC Center FAQ; BAM cinema FAQ;
+   Nitehawk policies; Metrograph and Alamo sell seats on a seat map. Unknown theaters show nothing. */
+const SEATING = {
+  "film-forum": "ga", "ifc-center": "ga", "bam": "ga", "film-at-lincoln-center": "ga",
+  "roxy-cinema-new-york": "reserved", "metrograph": "reserved", "nitehawk-cinema-williamsburg": "reserved", "nitehawk-cinema-prospect-park": "reserved",
+  "alamo-drafthouse-downtown-brooklyn": "reserved", "alamo-drafthouse-lower-manhattan": "reserved", "alamo-drafthouse-staten-island": "reserved",
+};
+const ROOM_SEATING = { "Alice Tully Hall": "reserved", "Walter Reade Theater": "ga", "Elinor Bunin Munroe Film Center": "ga" };
+function seatingFor(d) {
+  const rooms = roomsFor(d);
+  if (rooms.length) { const kinds = new Set(rooms.map((r) => ROOM_SEATING[r.name]).filter(Boolean)); return kinds.size === 1 ? [...kinds][0] : kinds.size ? "mixed" : null; }
+  return SEATING[d.venue_slug] || null;
+}
+const SEATING_TEXT = { ga: "General admission. Arrive early to sit together.", reserved: "Reserved seats" };
+
 // Theaters with more than one building (Film at Lincoln Center): list each, honestly.
 // A room with a "season" (MM-DD/MM-DD) only shows when the screening falls inside it.
 function roomsFor(d) {
@@ -1089,9 +1105,9 @@ function openSheet(key) {
         <div class="ww__times">${(d.showtimes?.length ? d.showtimes : [null]).map((t) => `<button class="time time--btn" data-action="ics" data-key="${h(d.key)}" data-time="${h(t || "")}" aria-label="Add ${h(t || "this screening")} to your calendar">${h(t || "Time TBA")} ${ICON.calendar}</button>`).join("")}</div>
         <div class="ww__hint">Tap a time to add it to your calendar</div>
         ${roomsFor(d).length ? `<div class="ww__venue ww__venue--rooms"><span class="ww__vname">${h(d.venue)}</span>
-          ${roomsFor(d).map((r) => `<a class="ww__room" href="https://maps.apple.com/?q=${encodeURIComponent(`${r.name}, ${r.address}`)}" target="_blank" rel="noopener"><b>${h(r.name)}</b><span>${h(r.address)}</span><span class="ww__dir">Directions ›</span></a>`).join("")}
-          <span class="ww__hint">Your ticket says which room.</span></div>`
-        : `<a class="ww__venue" href="${h(maps)}" target="_blank" rel="noopener"><span class="ww__vname">${h(d.venue)}</span>${addr ? `<span class="ww__addr">${h(addr)}</span>` : ""}<span class="ww__dir">Directions ›</span></a>`}
+          ${roomsFor(d).map((r) => `<a class="ww__room" href="https://maps.apple.com/?q=${encodeURIComponent(`${r.name}, ${r.address}`)}" target="_blank" rel="noopener"><b>${h(r.name)}</b><span>${h(r.address)}${seatingFor(d) === "mixed" && ROOM_SEATING[r.name] ? ` · ${ROOM_SEATING[r.name] === "ga" ? "General admission" : "Reserved seats"}` : ""}</span><span class="ww__dir">Directions ›</span></a>`).join("")}
+          <span class="ww__hint">Your ticket says which room.${SEATING_TEXT[seatingFor(d)] ? ` ${SEATING_TEXT[seatingFor(d)]}` : ""}</span></div>`
+        : `<a class="ww__venue" href="${h(maps)}" target="_blank" rel="noopener"><span class="ww__vname">${h(d.venue)}</span>${addr ? `<span class="ww__addr">${h(addr)}</span>` : ""}<span class="ww__dir">Directions ›</span></a>${SEATING_TEXT[seatingFor(d)] ? `<span class="ww__hint">${SEATING_TEXT[seatingFor(d)]}</span>` : ""}`}
       </div>
       <div class="sheet__section"><div class="actions">
         ${d.ticket_url ? `<a class="btn btn--brass" href="${h(d.ticket_url)}" target="_blank" rel="noopener">${ticketLabel(d)}</a>` : ""}
@@ -1099,11 +1115,11 @@ function openSheet(key) {
         <button class="btn" data-action="share" data-key="${h(d.key)}">${ICON.share} Share</button>
         <a class="btn" href="${h(letterboxdURL(d.films[0]))}" target="_blank" rel="noopener">Letterboxd</a>
         <a class="btn" href="${h(d.film_url || d.listing_url)}" target="_blank" rel="noopener">Full listing</a>
-      </div>${d.ticket_url && seatHint() ? `<div class="seat-hint">${h(seatHint())}</div>` : ""}</div>
+      </div>${d.ticket_url && seatHint() && seatingFor(d) !== "ga" ? `<div class="seat-hint">${h(seatHint())}</div>` : ""}</div>
       ${goingLine(d.key) ? `<div class="sheet__section going-line">${h(goingLine(d.key))}</div>` : ""}
-      ${imGoing(d.key) ? `<div class="sheet__section seats-row"><form class="seats-form" data-key="${h(d.key)}"><input id="going-seats" name="seats" maxlength="24" placeholder="Your seats, e.g. G7–G8" value="${h(mySeats(d.key) === "General admission" ? "" : mySeats(d.key))}" aria-label="Your seats" autocomplete="off"><button class="btn btn--sm">Save</button></form>
-        <button class="btn btn--sm btn--ghost ga-btn" data-action="going-ga" data-key="${h(d.key)}" aria-pressed="${mySeats(d.key) === "General admission"}">${mySeats(d.key) === "General admission" ? "✓ " : ""}General admission</button>
-        <div class="ww__hint">Friends going too will see where you’re sitting. No assigned seats? Tap General admission.</div></div>` : ""}
+      ${imGoing(d.key) && seatingFor(d) !== "ga" ? `<div class="sheet__section seats-row"><form class="seats-form" data-key="${h(d.key)}"><input id="going-seats" name="seats" maxlength="24" placeholder="Your seats, e.g. G7–G8" value="${h(mySeats(d.key) === "General admission" ? "" : mySeats(d.key))}" aria-label="Your seats" autocomplete="off"><button class="btn btn--sm">Save</button></form>
+        ${seatingFor(d) === "reserved" ? "" : `<button class="btn btn--sm btn--ghost ga-btn" data-action="going-ga" data-key="${h(d.key)}" aria-pressed="${mySeats(d.key) === "General admission"}">${mySeats(d.key) === "General admission" ? "✓ " : ""}General admission</button>`}
+        <div class="ww__hint">${seatingFor(d) === "reserved" ? "Friends going too will see where you’re sitting." : "Friends going too will see where you’re sitting. No assigned seats? Tap General admission."}</div></div>` : ""}
       ${commentsBlock(d)}
       ${facts.length ? `<div class="sheet__section"><dl class="facts">${facts.map(([k, v]) => `<dt>${h(k)}</dt><dd>${h(v).replace(/\n/g, "<br>")}</dd>`).join("")}</dl></div>` : ""}
       <div class="sheet__section"><div class="group-label" style="margin-top:0">Follow</div><div class="actions">${followButtons(d.films)}</div></div>
@@ -1170,7 +1186,7 @@ function friendsGoingBlock() {
   const until = nyDate(new Date(Date.now() + 7 * 864e5));
   const n = friendsPlans().filter((r) => r.others.length && r.occ.date <= until).length;
   if (!n) return "";
-  return `<button class="fgoing-teaser" data-action="nav" data-view="friends">${ICON.friends}<span>Friends are going to ${plural(n, "screening")} this week</span><span aria-hidden="true">›</span></button>`;
+  return `<button class="fgoing-teaser" data-action="nav" data-view="friends" data-seg="plans">${ICON.friends}<span>Friends are going to ${plural(n, "screening")} this week</span><span aria-hidden="true">›</span></button>`;
 }
 function planRow(r, who) {
   const today = todayISO();
@@ -1181,6 +1197,8 @@ function planRow(r, who) {
       ${who ? `<span class="fgoing__who">${who}</span>` : ""}</span><span aria-hidden="true" class="fgoing__go">›</span></button>`;
 }
 function viewFriends() {
+  if (socialReady() && state.room && ROOMS[state.room]) return viewRoom(state.room);
+  const seg = socialReady() ? (state.friendsSeg || (() => { try { return localStorage.getItem("filament.friends.seg"); } catch { return null; } })() || "lobby") : "plans";
   const plans = friendsPlans();
   const mine = plans.filter((r) => r.me);
   const theirs = plans.filter((r) => r.others.length);
@@ -1188,8 +1206,9 @@ function viewFriends() {
   const owner = !isFriend() && !isLocal();
   const joinOn = owner && D().friends?.join?.enabled !== false && D().friends?.join?.key;
   return `<div class="page">
-    <header class="page-head"><div><h1 class="page-title">Friends</h1><p class="page-sub">Who’s going to what, and where they’re sitting</p></div></header>
-    ${pollsBlock()}
+    <header class="page-head"><div><h1 class="page-title">Friends</h1><p class="page-sub">${seg === "lobby" ? "Talk films with everyone in Filament" : "Who’s going to what, and where they’re sitting"}</p></div></header>
+    ${socialReady() ? `<div class="seg seg--wide" role="tablist">${[["lobby", "Lobby"], ["plans", "Plans"]].map(([k, l]) => `<button data-action="friends-seg" data-v="${k}" role="tab" aria-pressed="${seg === k}" aria-selected="${seg === k}">${l}${k === "lobby" && lobbyUnread() ? ` <i class="seg__dot" aria-label="new"></i>` : ""}</button>`).join("")}</div>` : ""}
+    ${seg === "lobby" ? lobbyBlock() : `${pollsBlock()}
     <h2 class="settings-section">Your plans</h2>
     ${mine.length ? `<div class="fgoing">${mine.map((r) => planRow(r, `You${r.me.seats ? ` <span class="fgoing__seat">${h(r.me.seats)}</span>` : ""}${r.others.length ? ` · with ${names(r)}` : ""}`)).join("")}</div>`
       : `<p class="settings-lede">Tap <b>I’m going</b> on any screening. It shows here, and friends who see that screening will know. Add your seats once you’ve booked so they can sit nearby.</p>`}
@@ -1197,7 +1216,7 @@ function viewFriends() {
     ${theirs.length ? `<div class="fgoing">${theirs.map((r) => planRow(r, `${names(r)}${r.me ? " · you too" : ""}`)).join("")}</div>`
       : `<p class="settings-lede">Nothing yet. When a friend taps “I’m going”, it appears here${(settings().notifications || {}).notify_friends === false ? "" : ", and you’ll get a note if it’s something you follow"}.</p>`}
     ${owner ? `<div class="group" style="margin-top:26px"><div class="row"><div class="row__main"><div class="row__title">Invite friends</div><div class="row__sub">${joinOn ? "Share your join link" : "Set up your join link in Settings"}</div></div>
-      ${joinOn ? `<button class="btn btn--sm btn--brass" data-action="join-share">Share</button>` : `<button class="btn btn--sm" data-action="nav" data-view="settings">Settings</button>`}</div></div>` : ""}
+      ${joinOn ? `<button class="btn btn--sm btn--brass" data-action="join-share">Share</button>` : `<button class="btn btn--sm" data-action="nav" data-view="settings">Settings</button>`}</div></div>` : ""}`}
   </div>`;
 }
 
@@ -1215,17 +1234,23 @@ function goingLine(key, short) {
   const names = [...(me ? [`You${seat(mine)}`] : []), ...list.filter((g) => g.id !== myGoingId()).map((g) => `${g.name}${seat(g)}`)];
   return names.length === 1 ? (me ? `You’re going${seat(mine)}` : `${names[0]} is going`) : `${names.slice(0, -1).join(", ")} and ${names.at(-1)} are going`;
 }
-/** Comments and "which night?" polls, shared by everyone in Filament (data/social.json).
-    The same rules run in the friends service and, for the owner, in the app. */
+/** Comments, reactions, "which night?" polls and the Lobby, shared by everyone in
+    Filament (data/social.json). The same rules run in the friends service and, for
+    the owner, in the app. */
+const LOBBY_ROOMS = ["tonight", "just-saw", "recs", "deep-cuts", "intermission"];
+const REACTIONS = ["❤️", "👍", "😂", "😮", "🍿"];
 function applySocial(doc, who, a, today) {
   doc.comments = doc.comments || {};
   doc.polls = doc.polls || [];
+  doc.rooms = doc.rooms || {};
   const KEY = /^[\w-]+@\d{4}-\d\d-\d\d$/;
   const now = new Date().toISOString();
   const rid = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
   const mayRemove = (x) => x.by === who.id || who.id === "owner";
+  const clean = (s, n) => String(s || "").replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim().slice(0, n);
+  const target = () => (a.room ? (doc.rooms[a.room] || []) : (doc.comments[a.key] || [])).find((x) => x.id === a.id);
   if (a.type === "comment") {
-    const text = String(a.text || "").replace(/\s+/g, " ").trim().slice(0, 280);
+    const text = clean(a.text, 280).replace(/\s+/g, " ");
     if (!KEY.test(a.key || "") || !text) return "Write something first";
     const list = doc.comments[a.key] || (doc.comments[a.key] = []);
     if (list.length >= 200) return "This screening has a lot of comments already";
@@ -1236,6 +1261,27 @@ function applySocial(doc, who, a, today) {
     if (!c || !mayRemove(c)) return "Not yours to delete";
     doc.comments[a.key] = list.filter((x) => x !== c);
     if (!doc.comments[a.key].length) delete doc.comments[a.key];
+  } else if (a.type === "say") {
+    const text = clean(a.text, 600);
+    if (!LOBBY_ROOMS.includes(a.room) || !text) return "Write something first";
+    const list = doc.rooms[a.room] || (doc.rooms[a.room] = []);
+    list.push({ id: rid(), by: who.id, name: who.name, at: now, text });
+    if (list.length > 300) doc.rooms[a.room] = list.slice(-300);            // the room keeps its last 300 messages
+  } else if (a.type === "unsay") {
+    const list = doc.rooms[a.room] || [];
+    const m = list.find((x) => x.id === a.id);
+    if (!m || !mayRemove(m)) return "Not yours to delete";
+    doc.rooms[a.room] = list.filter((x) => x !== m);
+  } else if (a.type === "react") {
+    if (!REACTIONS.includes(a.emoji)) return "Unknown reaction";
+    const m = target();
+    if (!m) return "That message is gone";
+    m.re = m.re || {};
+    const v = m.re[a.emoji] || [];
+    const mine = v.some((x) => x.id === who.id);
+    for (const e of Object.keys(m.re)) { m.re[e] = m.re[e].filter((x) => x.id !== who.id); if (!m.re[e].length) delete m.re[e]; }   // one reaction each, like Tapback
+    if (!mine) (m.re[a.emoji] = m.re[a.emoji] || []).push({ id: who.id, name: who.name });
+    if (!Object.keys(m.re).length) delete m.re;
   } else if (a.type === "poll") {
     const opts = [...new Set((a.options || []).filter((k) => KEY.test(k) && k.split("@")[1] >= today))].slice(0, 4);
     const title = String(a.film?.title || "").trim().slice(0, 120);
@@ -1299,16 +1345,67 @@ const pollFor = (key) => socialDoc().polls.find((p) => p.options.includes(key));
 const shortWhen = (date) => (date === todayISO() ? "Tonight" : daysFrom(date) === 1 ? "Tomorrow" : fmtDay(date, { weekday: "short", month: "short", day: "numeric" }));
 // Friends get comments once the friends service knows about them (social.json readable).
 const socialReady = () => !isFriend() || !!D().social;
+/* Messages (screening comments and the Lobby) look and behave the same:
+   tap a message for Tapback-style reactions, and Delete if it's yours. */
+const ago = (ts) => { const m = Math.round((Date.now() - new Date(ts)) / 6e4); return m < 1 ? "now" : m < 60 ? `${m}m` : m < 1440 ? `${Math.round(m / 60)}h` : m < 10080 ? `${Math.round(m / 1440)}d` : fmtDay(nyDate(new Date(ts)), { month: "short", day: "numeric" }); };
+function messageEl(m, where, prev) {
+  const ref = where.room ? `data-room="${h(where.room)}"` : `data-key="${h(where.key)}"`;
+  const open = state.reactOpen === `${where.room || where.key}|${m.id}`;
+  const same = prev && prev.by === m.by && new Date(m.at) - new Date(prev.at) < 10 * 6e4;     // follow-ons stay quiet
+  const re = Object.entries(m.re || {});
+  return `<li class="msg${same ? " msg--cont" : ""}">
+    ${same ? "" : `<div class="msg__head"><b>${h(m.by === myGoingId() ? "You" : m.name)}</b><span>${ago(m.at)}</span></div>`}
+    <button class="msg__text" data-action="react-open" ${ref} data-id="${h(m.id)}" aria-expanded="${open}">${h(m.text).replace(/\n/g, "<br>")}</button>
+    ${re.length ? `<div class="msg__re">${re.map(([e, who]) => `<button class="re" data-action="react" ${ref} data-id="${h(m.id)}" data-e="${e}" aria-pressed="${who.some((x) => x.id === myGoingId())}" title="${h(who.map((x) => (x.id === myGoingId() ? "You" : x.name)).join(", "))}">${e}${who.length > 1 ? ` ${who.length}` : ""}</button>`).join("")}</div>` : ""}
+    ${open ? `<div class="tapback" role="menu">${REACTIONS.map((e) => `<button data-action="react" ${ref} data-id="${h(m.id)}" data-e="${e}" role="menuitem" aria-label="React ${e}">${e}</button>`).join("")}${m.by === myGoingId() || !isFriend() ? `<button class="tapback__del" data-action="${where.room ? "unsay" : "uncomment"}" ${ref} data-id="${h(m.id)}" role="menuitem">Delete</button>` : ""}</div>` : ""}
+  </li>`;
+}
+const messagesEl = (list, where) => `<ul class="msgs">${list.map((m, i) => messageEl(m, where, list[i - 1])).join("")}</ul>`;
+
+const ROOMS = {
+  "tonight": ["Tonight", "Who’s going out, spare tickets, last-minute plans"],
+  "just-saw": ["Just Saw", "What you watched and what you thought"],
+  "recs": ["Recommendations", "Old and new, worth seeking out"],
+  "deep-cuts": ["Deep Cuts", "Directors, film history, rabbit holes"],
+  "intermission": ["Intermission", "Everything else"],
+};
+const lobbySeen = () => { try { return JSON.parse(localStorage.getItem("filament.lobby.seen") || "{}"); } catch { return {}; } };
+function markRoomSeen(room) {
+  const last = (socialDoc().rooms?.[room] || []).slice(-1)[0];
+  if (!last) return;
+  const s = lobbySeen();
+  if (s[room] === last.at) return;
+  s[room] = last.at;
+  try { localStorage.setItem("filament.lobby.seen", JSON.stringify(s)); } catch { /* this device only */ }
+}
+const roomUnread = (room) => { const seen = lobbySeen()[room] || ""; return (socialDoc().rooms?.[room] || []).some((m) => m.at > seen && m.by !== myGoingId()); };
+const lobbyUnread = () => socialReady() && !!D().social && LOBBY_ROOMS.some(roomUnread);
+function lobbyBlock() {
+  return `<div class="group lobby">${LOBBY_ROOMS.map((r) => {
+    const last = (socialDoc().rooms?.[r] || []).slice(-1)[0];
+    return `<button class="row row--link room" data-action="room" data-room="${r}">${lamp(roomUnread(r) ? "on" : "off")}
+      <div class="row__main"><div class="row__title">${h(ROOMS[r][0])}</div><div class="row__sub">${last ? `${h(last.by === myGoingId() ? "You" : last.name)}: ${h(last.text.slice(0, 80))}` : h(ROOMS[r][1])}</div></div>
+      ${last ? `<span class="room__ago">${ago(last.at)}</span>` : ""}<span aria-hidden="true">›</span></button>`; }).join("")}</div>
+    <p class="group-foot">A lit lamp means something new since you last looked.</p>`;
+}
+function viewRoom(r) {
+  const list = socialDoc().rooms?.[r] || [];
+  return `<div class="page room-page">
+    <header class="page-head"><div><button class="back" data-action="room-back">‹ Lobby</button><h1 class="page-title">${h(ROOMS[r][0])}</h1><p class="page-sub">${h(ROOMS[r][1])}</p></div></header>
+    ${list.length ? messagesEl(list, { room: r }) : `<p class="settings-lede">Nothing here yet. Say hello.</p>`}
+    <form class="composer" data-room="${r}"><input id="say-${r}" name="text" maxlength="600" placeholder="Message ${h(ROOMS[r][0])}" autocomplete="off" aria-label="Message"><button class="btn btn--sm btn--brass">Send</button></form>
+  </div>`;
+}
+
 function commentsBlock(d) {
   if (!socialReady()) return "";
   const list = socialDoc().comments[d.key] || [];
   const nights = nightsFor(d), poll = pollFor(d.key);
-  const ago = (ts) => { const m = Math.round((Date.now() - new Date(ts)) / 6e4); return m < 1 ? "now" : m < 60 ? `${m}m` : m < 1440 ? `${Math.round(m / 60)}h` : `${Math.round(m / 1440)}d`; };
   return `<div class="sheet__section talk">
     <div class="group-label" style="margin-top:0">Comments</div>
-    ${list.length ? `<ul class="talk__list">${list.map((c) => `<li><b>${h(c.by === myGoingId() ? "You" : c.name)}</b> ${h(c.text)} <span class="talk__ago">${ago(c.at)}</span>${c.by === myGoingId() || !isFriend() ? `<button class="talk__x" data-action="uncomment" data-key="${h(d.key)}" data-id="${h(c.id)}" aria-label="Delete comment">${ICON.close}</button>` : ""}</li>`).join("")}</ul>` : ""}
+    ${list.length ? messagesEl(list, { key: d.key }) : ""}
     <form class="talk__form" data-key="${h(d.key)}"><input name="text" maxlength="280" placeholder="${list.length ? "Add a comment" : "Say something to friends"}" autocomplete="off" aria-label="Comment"><button class="btn btn--sm">Post</button></form>
-    ${poll ? `<button class="linkish talk__poll" data-action="nav" data-view="friends">${h(poll.by === myGoingId() ? "You" : poll.name)} asked which night works ›</button>`
+    ${poll ? `<button class="linkish talk__poll" data-action="nav" data-view="friends" data-seg="plans">${h(poll.by === myGoingId() ? "You" : poll.name)} asked which night works ›</button>`
       : nights.length >= 2 ? `<button class="linkish talk__poll" data-action="poll-new" data-key="${h(d.key)}">Not sure which night? Ask friends</button>` : ""}
   </div>`;
 }
@@ -1323,6 +1420,25 @@ function pollsBlock() {
       return `<div class="poll__opt"><button class="poll__when" data-action="open" data-key="${h(k)}"><b>${h(shortWhen(o.date))}${o.showtimes?.[0] ? ` · ${h(o.showtimes[0])}` : ""}</b><span>${h(o.venue)}${v.length ? ` · ${h(v.map((x) => (x.id === myGoingId() ? "you" : x.name)).join(", "))}` : ""}</span></button>
         <button class="poll__vote" data-action="vote" data-id="${h(p.id)}" data-key="${h(k)}" aria-pressed="${mine}">${mine ? "✓ Works" : "Works for me"}</button></div>`; }).join("")}
   </div>`).join("")}`;
+}
+
+function scrollRoomToEnd() { if (state.room) requestAnimationFrame(() => window.scrollTo({ top: document.documentElement.scrollHeight })); }
+let lobbyTimer = null;
+function startLobbyRefresh() {
+  if (lobbyTimer) return;
+  lobbyTimer = setInterval(async () => {
+    const inLobby = state.view === "friends" && (state.room || (state.friendsSeg || "lobby") === "lobby");
+    if (!inLobby || !state.src || document.hidden) return;
+    try {
+      const fresh = await state.src.readFile("social.json");
+      if (!fresh || JSON.stringify(fresh) === JSON.stringify(D().social)) return;
+      const atEnd = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 80;
+      state.data = { ...state.data, social: fresh };
+      if (state.room) markRoomSeen(state.room);
+      render();
+      if (state.room && atEnd) scrollRoomToEnd();
+    } catch { /* try again next time */ }
+  }, 15000);
 }
 
 async function saveGoing(key, on, seats = "") {
@@ -1573,6 +1689,16 @@ async function connectLetterboxd(raw) {
   } catch (e) { Object.assign(state, { lbBusy: false, lbError: e.message }); render(); }
 }
 document.addEventListener("submit", async (ev) => {
+  const cf = ev.target.closest?.(".composer");
+  if (cf) {
+    ev.preventDefault();
+    const input = cf.querySelector("input"), text = String(input.value || "").trim();
+    if (!text) return;
+    input.value = "";
+    if (await saveSocial({ type: "say", room: cf.dataset.room, text })) { markRoomSeen(cf.dataset.room); scrollRoomToEnd(); }
+    else input.value = text;
+    return;
+  }
   const tf = ev.target.closest?.(".talk__form");
   if (tf) {
     ev.preventDefault();
@@ -1655,7 +1781,14 @@ async function followFilm(f) {
   await addInterest({ id: uid("film", f.title), title: f.title, year: f.year || null, slug: f.slug || null,
     directors: (f.directors || []).map((x) => x.name), aka: [], added: todayISO(), enabled: true }, "films");
 }
-const reopenSheet = () => { if (sheetRoot.dataset.key) openSheet(sheetRoot.dataset.key); };
+const reopenSheet = () => {
+  if (!sheetRoot.dataset.key) return;
+  const top = sheetRoot.querySelector(".sheet")?.scrollTop || 0;
+  openSheet(sheetRoot.dataset.key);
+  const sh = sheetRoot.querySelector(".sheet"), sc = sheetRoot.querySelector(".scrim");
+  if (sh) { sh.style.animation = "none"; sh.scrollTop = top; }
+  if (sc) sc.style.animation = "none";
+};
 
 /* ------------------------------------------------------------- friends */
 const isFriend = () => !!state.src?.friend;
@@ -1972,7 +2105,16 @@ function transition(fn) {
   } catch { fn(); }
 }
 
+// Rows of chips that scroll sideways fade at whichever edge has more, like iOS, instead of a hard cut.
+function edgeFade(el) {
+  const more = el.scrollWidth - el.clientWidth > 2;
+  el.classList.toggle("fade-l", more && el.scrollLeft > 2);
+  el.classList.toggle("fade-r", more && el.scrollLeft < el.scrollWidth - el.clientWidth - 2);
+}
+document.addEventListener("scroll", (e) => { if (e.target.classList?.contains("when")) edgeFade(e.target); }, true);
+addEventListener("resize", () => document.querySelectorAll(".when").forEach(edgeFade));
 function afterRender() {
+  document.querySelectorAll(".when").forEach(edgeFade);
   // slide the tab/rail indicator from the previous section to the current one
   const idx = NAV.findIndex(([k]) => k === navOf(state.view));
   if (state.prevView) {
@@ -2244,7 +2386,7 @@ function gotALight() {
   if (reducedMotion()) { subtitle("Got a light?"); return; }
   document.body.classList.add("woodsman");
   overlay("grain", "", 7000);
-  try { const v = new Audio("got-a-light.m4a?v=20261110152124"); v.volume = 0.9; v.play().catch(() => radioStatic(5)); } catch { radioStatic(5); }
+  try { const v = new Audio("got-a-light.m4a?v=20261110155240"); v.volume = 0.9; v.play().catch(() => radioStatic(5)); } catch { radioStatic(5); }
   setTimeout(() => subtitle("Got a light?"), 150);         // the line comes in the first second of the clip
   setTimeout(() => document.body.classList.remove("woodsman"), 7200);
 }
@@ -2475,7 +2617,9 @@ async function onAction(el, ev) {
     if (state.view === el.dataset.view) { window.scrollTo({ top: 0, behavior: "smooth" }); return; }
     state.prevView = state.view;
     if (el.dataset.view === "help") state.beforeHelp = state.view;
-    state.view = el.dataset.view; state.query = ""; state.results = null; state.enter = true;
+    state.view = el.dataset.view; state.query = ""; state.results = null; state.enter = true; state.room = null; state.reactOpen = null;
+    if (el.dataset.seg) state.friendsSeg = el.dataset.seg;
+    if (state.view === "friends") startLobbyRefresh();
     transition(() => { render(); window.scrollTo({ top: 0 }); });
     return;
   }
@@ -2599,7 +2743,14 @@ async function onAction(el, ev) {
   if (a === "days") return saveFilters((f) => { f.days = el.dataset.v; }, "Saved");
   if (a === "venues") return openVenueSheet();
   if (a === "filter-open") return openFilterSheet();
-  if (a === "uncomment") return saveSocial({ type: "uncomment", key: el.dataset.key, id: el.dataset.id });
+  if (a !== "react-open" && a !== "react" && state.reactOpen) state.reactOpen = null;
+  if (a === "react-open") { const k = `${el.dataset.room || el.dataset.key}|${el.dataset.id}`; state.reactOpen = state.reactOpen === k ? null : k; reopenSheet(); render(); return; }
+  if (a === "react") { state.reactOpen = null; return saveSocial({ type: "react", room: el.dataset.room, key: el.dataset.key, id: el.dataset.id, emoji: el.dataset.e }); }
+  if (a === "unsay") { state.reactOpen = null; return saveSocial({ type: "unsay", room: el.dataset.room, id: el.dataset.id }); }
+  if (a === "room") { state.room = el.dataset.room; markRoomSeen(state.room); state.enter = true; startLobbyRefresh(); return transition(() => { render(); scrollRoomToEnd(); }); }
+  if (a === "room-back") { state.room = null; state.enter = true; return transition(() => { render(); window.scrollTo({ top: 0 }); }); }
+  if (a === "friends-seg") { state.friendsSeg = el.dataset.v; try { localStorage.setItem("filament.friends.seg", el.dataset.v); } catch { /* this device only */ } if (el.dataset.v === "lobby") startLobbyRefresh(); return render(); }
+  if (a === "uncomment") { state.reactOpen = null; return saveSocial({ type: "uncomment", key: el.dataset.key, id: el.dataset.id }); }
   if (a === "unpoll") return saveSocial({ type: "unpoll", poll: el.dataset.id });
   if (a === "vote") return saveSocial({ type: "vote", poll: el.dataset.id, option: el.dataset.key });
   if (a === "poll-new") { const d = findItem(el.dataset.key) || D().listings?.occurrences?.[el.dataset.key]; const n = nightsFor(d).slice(0, 4);
@@ -2782,7 +2933,7 @@ function bindWelcome() {
 applyTheme();
 // Instant launch & offline: cache the app itself (never your data).
 if ("serviceWorker" in navigator && !isLocal()) {
-  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261110152124").catch(() => {}));
+  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261110155240").catch(() => {}));
 }
 // Friend invite links: #invite=<key>&api=<friends service> (the fragment never reaches any server).
 (function acceptInvite() {
