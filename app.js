@@ -1,12 +1,12 @@
-import { creditIsDirector, fold, matchFilm, matchOccurrence, titleKey } from "./match.js?v=20261110044608";
+import { creditIsDirector, fold, matchFilm, matchOccurrence, titleKey } from "./match.js?v=20261110045351";
 import {
   ApiError, FRIENDS_API, cached, emailSignIn, forgetConnection, isLocal, joinFilament, joinInfo, letterboxdFeed, loadAll, loadConnection,
   makeSource, mutateSettings, saveConnection,
-} from "./data.js?v=20261110044608";
-import { followList, forYou, importExport, lookup, lovedDirectors, mergeFeed, recentlyWatched, stars } from "./letterboxd.js?v=20261110044608";
+} from "./data.js?v=20261110045351";
+import { followList, forYou, importExport, lookup, lovedDirectors, mergeFeed, recentlyWatched, stars } from "./letterboxd.js?v=20261110045351";
 import {
   filmographyFor, searchCatalog, searchWikidataDirectors, searchWikidataFilms, slugFromCatalog,
-} from "./search.js?v=20261110044608";
+} from "./search.js?v=20261110045351";
 
 const TZ = "America/New_York";
 const app = document.getElementById("app");
@@ -1700,12 +1700,12 @@ function rememberSearchSoon(q) {
 }
 
 /* --------------------------------------------------------- what's new */
-const WHATS_NEW = { id: "2026-11-friends-2", items: [
-  ["Friends", "Tap “I’m going” on any screening. Friends see it, and can add their seats so you sit together."],
-  ["For you", "Picks from your Letterboxd ratings, each with the reason it’s for you."],
-  ["Letterboxd in one step", "Just your username. Following → Letterboxd."],
-  ["Nearest first", "Order each day by the theater closest to you. Settings → This device."],
-  ["A few hidden things", "About & Help → Three things to try."],
+const WHATS_NEW = { id: "2026-11-friends-3", items: [
+  ["Friends, together", "See which screenings your friends are going to. Tap “I’m going” to join them, share your seats so you sit together, and get a heads-up when a friend is going to something you love. It all lives in the new Friends tab."],
+  ["For you", "Picks that know your taste, learned from your Letterboxd ratings. Each one tells you exactly why."],
+  ["Letterboxd in one step", "Just your username, and every film you’ve rated ★★★★½ or higher is followed for you."],
+  ["Every film they made", "Tap a director you follow for their whole filmography, with anything playing in New York right at the top."],
+  ["Something’s hiding", "A few directors are tucked away in here. Start with About & Help → Three things to try."],
 ] };
 function maybeWhatsNew() {
   let seen = null;
@@ -1715,7 +1715,7 @@ function maybeWhatsNew() {
   sheetRoot.innerHTML = `<div class="scrim" data-action="close-sheet"></div>
     <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="wn-title"><div class="sheet__grab"></div>
       <div class="sheet__hero"><button class="icon-btn sheet__close" data-action="close-sheet" aria-label="Close">${ICON.close}</button>
-        <div class="eyebrow">Filament</div><h2 class="sheet__title" id="wn-title">What’s new</h2></div>
+        <h2 class="sheet__title" id="wn-title">What’s new</h2><p class="page-sub">Since you were last here</p></div>
       <div class="sheet__section"><ul class="whatsnew">${WHATS_NEW.items.map(([t, d]) => `<li>${lamp("on")}<div><b>${h(t)}</b><span>${h(d)}</span></div></li>`).join("")}</ul>
         <div class="actions" style="margin-top:18px"><button class="btn btn--brass" data-action="close-sheet" style="width:100%">Continue</button></div></div>
     </div>`;
@@ -2436,7 +2436,7 @@ function bindWelcome() {
 applyTheme();
 // Instant launch & offline: cache the app itself (never your data).
 if ("serviceWorker" in navigator && !isLocal()) {
-  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261110044608").catch(() => {}));
+  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261110045351").catch(() => {}));
 }
 // Friend invite links: #invite=<key>&api=<friends service> (the fragment never reaches any server).
 (function acceptInvite() {

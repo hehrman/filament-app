@@ -1119,3 +1119,9 @@ body { overscroll-behavior-y: contain; }
 .pick__title { font-weight: 600; font-size: 17px; margin-top: 10px; }
 .pick__when { font-size: 13.5px; color: var(--text-2); margin-top: 6px; }
 .pick__when b { color: var(--text); font-weight: 600; }
+
+/* What's new: the lamps glow without being cut off */
+.whatsnew, .whatsnew li { overflow: visible; }
+.whatsnew .lamp::before { inset: -35%; }
+.sheet__section:has(.whatsnew) { overflow: visible; }
+.whatsnew { padding-top: 10px; }
