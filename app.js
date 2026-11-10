@@ -1,12 +1,12 @@
-import { creditIsDirector, fold, matchFilm, matchOccurrence, titleKey } from "./match.js?v=20261110044100";
+import { creditIsDirector, fold, matchFilm, matchOccurrence, titleKey } from "./match.js?v=20261110044608";
 import {
   ApiError, FRIENDS_API, cached, emailSignIn, forgetConnection, isLocal, joinFilament, joinInfo, letterboxdFeed, loadAll, loadConnection,
   makeSource, mutateSettings, saveConnection,
-} from "./data.js?v=20261110044100";
-import { followList, forYou, importExport, lookup, lovedDirectors, mergeFeed, recentlyWatched, stars } from "./letterboxd.js?v=20261110044100";
+} from "./data.js?v=20261110044608";
+import { followList, forYou, importExport, lookup, lovedDirectors, mergeFeed, recentlyWatched, stars } from "./letterboxd.js?v=20261110044608";
 import {
   filmographyFor, searchCatalog, searchWikidataDirectors, searchWikidataFilms, slugFromCatalog,
-} from "./search.js?v=20261110044100";
+} from "./search.js?v=20261110044608";
 
 const TZ = "America/New_York";
 const app = document.getElementById("app");
@@ -405,10 +405,8 @@ function forYouBlock() {
           <span class="pick__art">${posterImg(g.poster, "pick__poster")}</span>
           <span class="pick__title">${h(g.film.title)}</span>
           <span class="pick__why">${h(g.why)}</span>
-          ${g.why2 ? `<span class="pick__why pick__why--2">${h(g.why2)}</span>` : ""}
           <span class="pick__when"><b>${h(fmtDay(o.date, { weekday: "short", month: "short", day: "numeric" }))}</b> · ${h(o.venue)}${g.occs.length > 1 ? ` · +${g.occs.length - 1} more` : ""}</span>
         </button>
-        <div class="pick__follow">${followButtons([g.film])}</div>
       </article>`;
     }).join("")}</div>
   </section>`;
@@ -1702,7 +1700,7 @@ function rememberSearchSoon(q) {
 }
 
 /* --------------------------------------------------------- what's new */
-const WHATS_NEW = { id: "2026-11-friends", items: [
+const WHATS_NEW = { id: "2026-11-friends-2", items: [
   ["Friends", "Tap “I’m going” on any screening. Friends see it, and can add their seats so you sit together."],
   ["For you", "Picks from your Letterboxd ratings, each with the reason it’s for you."],
   ["Letterboxd in one step", "Just your username. Following → Letterboxd."],
@@ -2438,7 +2436,7 @@ function bindWelcome() {
 applyTheme();
 // Instant launch & offline: cache the app itself (never your data).
 if ("serviceWorker" in navigator && !isLocal()) {
-  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261110044100").catch(() => {}));
+  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261110044608").catch(() => {}));
 }
 // Friend invite links: #invite=<key>&api=<friends service> (the fragment never reaches any server).
 (function acceptInvite() {
