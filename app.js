@@ -1,12 +1,12 @@
-import { creditIsDirector, fold, matchFilm, matchOccurrence, titleKey } from "./match.js?v=20261110155240";
+import { creditIsDirector, fold, matchFilm, matchOccurrence, titleKey } from "./match.js?v=20261110161218";
 import {
-  ApiError, FRIENDS_API, cached, emailSignIn, forgetConnection, isLocal, joinFilament, joinInfo, letterboxdFeed, loadAll, loadConnection,
+  ApiError, FRIENDS_API, trustedApi, cached, emailSignIn, forgetConnection, isLocal, joinFilament, joinInfo, letterboxdFeed, loadAll, loadConnection,
   makeSource, mutateSettings, saveConnection,
-} from "./data.js?v=20261110155240";
-import { followList, forYou, importExport, lookup, lovedDirectors, mergeFeed, recentlyWatched, stars } from "./letterboxd.js?v=20261110155240";
+} from "./data.js?v=20261110161218";
+import { followList, forYou, importExport, lookup, lovedDirectors, mergeFeed, recentlyWatched, stars } from "./letterboxd.js?v=20261110161218";
 import {
   filmographyFor, searchCatalog, searchWikidataDirectors, searchWikidataFilms, slugFromCatalog,
-} from "./search.js?v=20261110155240";
+} from "./search.js?v=20261110161218";
 
 const TZ = "America/New_York";
 const app = document.getElementById("app");
@@ -176,7 +176,7 @@ function personPhoto(name, tmdb, photo) {
 }
 function avatar(name, tmdb, photo, cls = "") {
   const src = personPhoto(name, tmdb, photo);
-  return `<span class="avatar gilt ${cls}"><span class="avatar__i">${h(initials(name || "?"))}</span>${src ? `<img src="${h(src)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.remove()">` : ""}</span>`;
+  return `<span class="avatar gilt ${cls}"><span class="avatar__i">${h(initials(name || "?"))}</span>${src ? `<img src="${h(src)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer">` : ""}</span>`;
 }
 /** Poster for a followed film, from what Filament has seen in the listings. */
 function catalogPoster(f) {
@@ -186,7 +186,7 @@ function catalogPoster(f) {
 }
 
 const posterImg = (src, cls) => src
-  ? `<img class="${cls}" src="${h(src)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.remove()">` : "";
+  ? `<img class="${cls}" src="${h(src)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer">` : "";
 
 function seenTag(films) {
   const rec = films.map((f) => lookup(lbData(), f)).find((r) => r && r.w);
@@ -774,7 +774,7 @@ function viewSettings() {
     <div class="group-label">Email</div>
     <div class="group">
       ${row("Email alerts", "", sw("email_enabled", n.email_enabled !== false, "Email alerts"))}
-      ${row("Send to", "", `<input type="email" id="recipient" value="${h(n.recipient || "")}" placeholder="${isFriend() ? "you@example.com" : "Default address"}" style="width:min(240px,52vw)">`)}
+      ${isFriend() ? row("Send to", `${h(n.recipient || "")}<br>To use a different email, send feedback.`, "") : row("Send to", "", `<input type="email" id="recipient" value="${h(n.recipient || "")}" placeholder="Default address" style="width:min(240px,52vw)">`)}
     </div>
     <div class="group-label">Tell me about</div>
     <div class="group">
@@ -837,8 +837,8 @@ const FAQ = [
   ["How does Letterboxd work here?", "Connect with just your username in Following → Letterboxd. Films you rated 4.5★ or higher are followed automatically, anything you’ve logged is marked “Seen,” and new ratings are picked up each morning. For your full history and watchlist, import your Letterboxd export from the same page."],
   ["How are “For you” picks chosen?", "From your Letterboxd ratings. Filament learns which directors, writers, cinematographers, genres and eras you rate above your own average, so a tough rater’s 4★ counts for more. It checks everything playing in New York against that, says why for every pick, and leaves out films you’ve seen."],
   ["Why isn’t a favorite showing up?", "If you watched it in the last 4 months, Filament assumes you don’t need a reminder yet. You can change that in Following → Letterboxd. It may also simply not be playing in New York right now. Try “Is it playing?” at the top of Upcoming."],
-  ["How does Friends work?", "Tap “I’m going” on any screening. Friends who see that screening will know, and you can add your seats (or General admission) so you sit together. The Friends tab shows your plans and theirs, and you get a heads-up when a friend is going to something you follow."],
-  ["Who can see what I’m going to?", "Only people in your Filament, and only your first name and seats. Nobody sees what you follow, your Letterboxd or your email."],
+  ["How does Friends work?", "Tap “I’m going” on any screening. Friends you’re connected with will know, and you can add your seats (or General admission) so you sit together. The Friends tab shows your plans and theirs, and you get a heads-up when a friend is going to something you follow."],
+  ["Who can see what I’m going to?", "Only people you’re connected with: whoever invited you, and friends you add with your own “Add me” link (Friends → People). They see your first name, plans, seats, comments and Lobby messages, and you see theirs. Nobody else does, and there’s no list of who’s on Filament. Nobody sees what you follow, your Letterboxd or your email."],
   ["What will I be told about?", "Only news. Anything already scheduled when you follow something shows up in Upcoming right away instead. After that: new screenings of what you follow, moved dates and changed showtimes, cancellations, a “last chance” reminder before a film’s final screening, and friends going to something you follow. Each piece of news only once. Settings → Alerts lets you choose, and narrow alerts to, say, 35mm prints or certain theaters."],
   ["Emails or notifications?", "Either or both, in Settings → Alerts. Emails group everything new into one message, plus a Sunday “Playing this week” digest. Notifications put the same news on your lock screen."],
   ["Can I buy tickets here?", "Filament takes you straight to each theater’s own ticket page. For Alamo, Metrograph and Nitehawk that’s the live seat map, so you can pick your seats there."],
@@ -1036,6 +1036,8 @@ const EVENT_TEXT = {
   reappeared: () => "Reappeared in the listings",
 };
 // Theaters with assigned seats: the ticket page is where you see the live seat map.
+/** Links from listings data: only real web pages (never javascript: or data: links). */
+const safeUrl = (u) => { try { const x = new URL(u); return /^https?:$/.test(x.protocol) ? x.href : ""; } catch { return ""; } };
 const ticketLabel = (d) => /drafthouse\.com|metrograph\.com|nitehawkcinema\.com/.test(d.ticket_url || "") ? "See seats & tickets" : "Tickets";
 /* How seats work at each theater. From the theaters themselves or people who go:
    Film Forum, Roxy, Film at Lincoln Center (owner, Nov 2026); IFC Center FAQ; BAM cinema FAQ;
@@ -1110,11 +1112,11 @@ function openSheet(key) {
         : `<a class="ww__venue" href="${h(maps)}" target="_blank" rel="noopener"><span class="ww__vname">${h(d.venue)}</span>${addr ? `<span class="ww__addr">${h(addr)}</span>` : ""}<span class="ww__dir">Directions ›</span></a>${SEATING_TEXT[seatingFor(d)] ? `<span class="ww__hint">${SEATING_TEXT[seatingFor(d)]}</span>` : ""}`}
       </div>
       <div class="sheet__section"><div class="actions">
-        ${d.ticket_url ? `<a class="btn btn--brass" href="${h(d.ticket_url)}" target="_blank" rel="noopener">${ticketLabel(d)}</a>` : ""}
+        ${safeUrl(d.ticket_url) ? `<a class="btn btn--brass" href="${h(safeUrl(d.ticket_url))}" target="_blank" rel="noopener noreferrer">${ticketLabel(d)}</a>` : ""}
         <button class="btn${imGoing(d.key) ? " btn--on" : ""}" data-action="going" data-key="${h(d.key)}" aria-pressed="${imGoing(d.key)}">${imGoing(d.key) ? "✓ Going" : "I’m going"}</button>
         <button class="btn" data-action="share" data-key="${h(d.key)}">${ICON.share} Share</button>
         <a class="btn" href="${h(letterboxdURL(d.films[0]))}" target="_blank" rel="noopener">Letterboxd</a>
-        <a class="btn" href="${h(d.film_url || d.listing_url)}" target="_blank" rel="noopener">Full listing</a>
+        ${safeUrl(d.film_url || d.listing_url) ? `<a class="btn" href="${h(safeUrl(d.film_url || d.listing_url))}" target="_blank" rel="noopener noreferrer">Full listing</a>` : ""}
       </div>${d.ticket_url && seatHint() && seatingFor(d) !== "ga" ? `<div class="seat-hint">${h(seatHint())}</div>` : ""}</div>
       ${goingLine(d.key) ? `<div class="sheet__section going-line">${h(goingLine(d.key))}</div>` : ""}
       ${imGoing(d.key) && seatingFor(d) !== "ga" ? `<div class="sheet__section seats-row"><form class="seats-form" data-key="${h(d.key)}"><input id="going-seats" name="seats" maxlength="24" placeholder="Your seats, e.g. G7–G8" value="${h(mySeats(d.key) === "General admission" ? "" : mySeats(d.key))}" aria-label="Your seats" autocomplete="off"><button class="btn btn--sm">Save</button></form>
@@ -1206,7 +1208,8 @@ function viewFriends() {
   const owner = !isFriend() && !isLocal();
   const joinOn = owner && D().friends?.join?.enabled !== false && D().friends?.join?.key;
   return `<div class="page">
-    <header class="page-head"><div><h1 class="page-title">Friends</h1><p class="page-sub">${seg === "lobby" ? "Talk films with everyone in Filament" : "Who’s going to what, and where they’re sitting"}</p></div></header>
+    <header class="page-head"><div><h1 class="page-title">Friends</h1><p class="page-sub">${seg === "lobby" ? "Talk films with your people" : "Who’s going to what, and where they’re sitting"}</p></div></header>
+    ${socialReady() && !isLocal() ? `<button class="people-btn" data-action="people">${ICON.friends}<span>People</span></button>` : ""}
     ${socialReady() ? `<div class="seg seg--wide" role="tablist">${[["lobby", "Lobby"], ["plans", "Plans"]].map(([k, l]) => `<button data-action="friends-seg" data-v="${k}" role="tab" aria-pressed="${seg === k}" aria-selected="${seg === k}">${l}${k === "lobby" && lobbyUnread() ? ` <i class="seg__dot" aria-label="new"></i>` : ""}</button>`).join("")}</div>` : ""}
     ${seg === "lobby" ? lobbyBlock() : `${pollsBlock()}
     <h2 class="settings-section">Your plans</h2>
@@ -1388,6 +1391,59 @@ function lobbyBlock() {
       ${last ? `<span class="room__ago">${ago(last.at)}</span>` : ""}<span aria-hidden="true">›</span></button>`; }).join("")}</div>
     <p class="group-foot">A lit lamp means something new since you last looked.</p>`;
 }
+/* People. Friends add each other with a personal link (no list of members, ever).
+   The owner sees everyone they invited and can keep two people apart. */
+async function openPeople() {
+  let body = "";
+  if (isFriend()) {
+    let p;
+    try { p = await state.src.people(); } catch (e) { toast(`Couldn’t load your people: ${e.message}`); return; }
+    state.peopleLink = p.link;
+    body = `<div class="group">
+      ${p.owner ? `<div class="row"><div class="row__main"><div class="row__title">${h(p.owner)}</div><div class="row__sub">Invited you</div></div></div>` : ""}
+      ${p.people.map((x) => `<div class="row"><div class="row__main"><div class="row__title">${h(x.name)}</div></div><button class="btn btn--sm btn--ghost" data-action="people-remove" data-id="${h(x.id)}" data-name="${h(x.name)}">Remove</button></div>`).join("")}
+    </div>
+    <div class="actions" style="margin-top:16px"><button class="btn btn--brass" data-action="people-add">Add a friend</button></div>
+    <p class="group-foot">Send your link to a friend who’s on Filament. When they open it, you’re connected: you see each other’s plans, seats, comments and Lobby messages. Nobody else does, and nobody can see who else is here.</p>`;
+  } else {
+    const fr = (D().friends?.friends || []).filter((f) => f.enabled !== false);
+    const circle = D().circle || { pairs: [], apart: [] };
+    const conn = (id) => fr.filter((o) => o.id !== id && (circle.pairs || []).some((p) => p.includes(id) && p.includes(o.id))).map((o) => o.name.split(" ")[0]);
+    const apart = (id) => fr.filter((o) => (circle.apart || []).some((p) => p.includes(id) && p.includes(o.id))).map((o) => o.name.split(" ")[0]);
+    body = `<div class="group">${fr.map((f) => `<button class="row row--link" data-action="people-apart" data-id="${h(f.id)}"><div class="row__main"><div class="row__title">${h(f.name)}</div>
+      <div class="row__sub">${[conn(f.id).length ? `Connected with ${h(conn(f.id).join(", "))}` : "Connected only with you", apart(f.id).length ? `Kept apart from ${h(apart(f.id).join(", "))}` : ""].filter(Boolean).join(" · ")}</div></div><span aria-hidden="true">›</span></button>`).join("") || `<div class="row"><div class="row__main row__sub">No one yet. Share your join link.</div></div>`}</div>
+      <p class="group-foot">Everyone you invite is connected with you. Friends connect with each other using their own “Add me” links. Tap someone to keep them apart from another person: they’ll never be connected or see each other.</p>`;
+  }
+  sheetRoot.innerHTML = `<div class="scrim" data-action="close-sheet"></div>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="ppl-title"><div class="sheet__grab"></div>
+      <div class="sheet__hero"><button class="icon-btn sheet__close" data-action="close-sheet" aria-label="Close">${ICON.close}</button>
+        <h2 class="sheet__title" id="ppl-title">People</h2></div>
+      <div class="sheet__section">${body}</div></div>`;
+  dragToDismiss(sheetRoot.querySelector(".sheet"));
+}
+function openApart(id) {
+  const fr = (D().friends?.friends || []).filter((f) => f.enabled !== false);
+  const me = fr.find((f) => f.id === id);
+  if (!me) return;
+  const circle = D().circle || { pairs: [], apart: [] };
+  const isApart = (o) => (circle.apart || []).some((p) => p.includes(id) && p.includes(o));
+  sheetRoot.innerHTML = `<div class="scrim" data-action="close-sheet"></div>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="apart-title"><div class="sheet__grab"></div>
+      <div class="sheet__hero"><button class="icon-btn sheet__close" data-action="close-sheet" aria-label="Close">${ICON.close}</button>
+        <h2 class="sheet__title" id="apart-title">${h(me.name.split(" ")[0])}</h2><p class="page-sub">Keep apart from</p></div>
+      <div class="sheet__section"><div class="group">${fr.filter((o) => o.id !== id).map((o) => `<label class="row" style="cursor:pointer"><div class="row__main"><div class="row__title">${h(o.name)}</div></div>
+        <span class="switch"><input type="checkbox" data-action="apart-toggle" data-a="${h(id)}" data-b="${h(o.id)}" ${isApart(o.id) ? "checked" : ""} aria-label="Keep ${h(me.name.split(" ")[0])} apart from ${h(o.name)}"><span></span></span></label>`).join("")}</div>
+      <p class="group-foot">People kept apart are never connected, even if one sends the other a link, and never see each other’s name or activity. Neither is told.</p></div></div>`;
+  dragToDismiss(sheetRoot.querySelector(".sheet"));
+}
+async function saveCircle(fn, msg) {
+  const fresh = (await state.src.readFile("friends/circle.json").catch(() => null)) || { pairs: [], apart: [] };
+  fresh.pairs = fresh.pairs || []; fresh.apart = fresh.apart || [];
+  fn(fresh);
+  await state.src.writeFile("friends/circle.json", fresh, msg);
+  state.data = { ...state.data, circle: fresh };
+}
+
 function viewRoom(r) {
   const list = socialDoc().rooms?.[r] || [];
   return `<div class="page room-page">
@@ -1597,7 +1653,7 @@ function openMenu(el, x, y) {
     if (act === "open") openSheet(key);
     if (act === "ics") { downloadICS(d, d.showtimes?.[0] || ""); toast("Calendar event created. Open it to add to Calendar"); }
     if (act === "share") shareScreening(d);
-    if (act === "tickets") window.open(d.ticket_url, "_blank", "noopener");
+    if (act === "tickets" && safeUrl(d.ticket_url)) window.open(safeUrl(d.ticket_url), "_blank", "noopener,noreferrer");
     if (act === "maps") window.open(`https://maps.apple.com/?q=${encodeURIComponent(`${d.venue}, New York, NY`)}`, "_blank", "noopener");
     if (act === "follow") followDirector(credit.name, credit.tmdb || null, credit.slug || null);
   });
@@ -2105,6 +2161,9 @@ function transition(fn) {
   } catch { fn(); }
 }
 
+document.addEventListener("error", (e) => { if (e.target?.tagName === "IMG") e.target.remove(); }, true);
+if (window.top !== window.self) { try { window.top.location = window.self.location.href; } catch { document.documentElement.hidden = true; } }   // never inside someone else's frame
+
 // Rows of chips that scroll sideways fade at whichever edge has more, like iOS, instead of a hard cut.
 function edgeFade(el) {
   const more = el.scrollWidth - el.clientWidth > 2;
@@ -2386,7 +2445,7 @@ function gotALight() {
   if (reducedMotion()) { subtitle("Got a light?"); return; }
   document.body.classList.add("woodsman");
   overlay("grain", "", 7000);
-  try { const v = new Audio("got-a-light.m4a?v=20261110155240"); v.volume = 0.9; v.play().catch(() => radioStatic(5)); } catch { radioStatic(5); }
+  try { const v = new Audio("got-a-light.m4a?v=20261110161218"); v.volume = 0.9; v.play().catch(() => radioStatic(5)); } catch { radioStatic(5); }
   setTimeout(() => subtitle("Got a light?"), 150);         // the line comes in the first second of the clip
   setTimeout(() => document.body.classList.remove("woodsman"), 7200);
 }
@@ -2530,6 +2589,10 @@ async function refresh(quiet) {
   if (!quiet) render();
   try {
     if (state.src.friend && !state.src.name) await state.src.verify();
+    if (state.src.friend && state.pendingAdd) {
+      const key = state.pendingAdd; state.pendingAdd = null;
+      state.src.peopleAction({ action: "connect", key }).then((r) => { toast(`You and ${r.name} are connected`); refresh(true); }).catch((e) => toast(e.message));
+    }
     state.data = await loadAll(state.src);
     state.error = null;
     state.running = !!(await state.src.activeRun().catch(() => null));
@@ -2743,6 +2806,22 @@ async function onAction(el, ev) {
   if (a === "days") return saveFilters((f) => { f.days = el.dataset.v; }, "Saved");
   if (a === "venues") return openVenueSheet();
   if (a === "filter-open") return openFilterSheet();
+  if (a === "people") return openPeople();
+  if (a === "people-apart") return openApart(el.dataset.id);
+  if (a === "people-remove") {
+    if (!confirm(`Remove ${el.dataset.name}? You’ll stop seeing each other’s plans and messages. They aren’t told.`)) return;
+    try { await state.src.peopleAction({ action: "remove", id: el.dataset.id }); toast(`Removed ${el.dataset.name}`); await refresh(); openPeople(); } catch (e) { toast(e.message); }
+    return;
+  }
+  if (a === "people-add") {
+    let key = state.peopleLink;
+    try { if (!key) key = (await state.src.peopleAction({ action: "link" })).link; } catch (e) { toast(e.message); return; }
+    state.peopleLink = key;
+    const link = `${appBase()}#add=${encodeURIComponent(key)}`;
+    if (navigator.share) { try { await navigator.share({ title: "Add me on Filament", text: "Add me on Filament so we can see each other’s plans:", url: link }); } catch { /* cancelled */ } return; }
+    try { await navigator.clipboard.writeText(link); toast("Link copied. Send it to a friend on Filament."); } catch { prompt("Send this link to a friend on Filament:", link); }
+    return;
+  }
   if (a !== "react-open" && a !== "react" && state.reactOpen) state.reactOpen = null;
   if (a === "react-open") { const k = `${el.dataset.room || el.dataset.key}|${el.dataset.id}`; state.reactOpen = state.reactOpen === k ? null : k; reopenSheet(); render(); return; }
   if (a === "react") { state.reactOpen = null; return saveSocial({ type: "react", room: el.dataset.room, key: el.dataset.key, id: el.dataset.id, emoji: el.dataset.e }); }
@@ -2761,6 +2840,7 @@ async function onAction(el, ev) {
   if (a === "filt-reset") { filt = { ...FILTER0 }; return filterChanged(); }
   if (a === "disconnect") {
     if (!confirm(isFriend() ? "Sign out on this device? Everything you follow stays saved. Get back in any time with a sign-in link sent to your email." : "Disconnect this device? Your watchlist and history stay safe on GitHub.")) return;
+    if (isFriend()) await state.src.signout().catch(() => {});
     forgetConnection(); state.src = null; state.data = null; return render();
   }
   if (a === "remove") {
@@ -2822,6 +2902,12 @@ document.addEventListener("change", (ev) => {
   if (el.dataset.action === "toggle") {
     const { kind, id } = el.dataset, on = el.checked;
     saveSettings((s) => { const x = s[kind].find((i) => i.id === id); if (x) x.enabled = on; }, `${on ? "Resume" : "Pause"} monitoring`, on ? "Monitoring resumed" : "Paused");
+  } else if (el.dataset.action === "apart-toggle") {
+    const { a: x, b: y } = el.dataset, on = el.checked;
+    saveCircle((c) => {
+      c.apart = c.apart.filter((p) => !(p.includes(x) && p.includes(y)));
+      if (on) { c.apart.push([x, y]); c.pairs = c.pairs.filter((p) => !(p.includes(x) && p.includes(y))); }
+    }, on ? "Keep two friends apart" : "Stop keeping two friends apart").then(() => toast(on ? "Kept apart" : "No longer kept apart")).catch((e) => { el.checked = !on; toast(`Couldn’t save: ${e.message}`); });
   } else if (el.dataset.action === "filt-seen") {
     filt.hideSeen = el.checked; filterChanged();
   } else if (el.dataset.action === "sounds") {
@@ -2933,12 +3019,14 @@ function bindWelcome() {
 applyTheme();
 // Instant launch & offline: cache the app itself (never your data).
 if ("serviceWorker" in navigator && !isLocal()) {
-  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261110155240").catch(() => {}));
+  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261110161218").catch(() => {}));
 }
 // Friend invite links: #invite=<key>&api=<friends service> (the fragment never reaches any server).
 (function acceptInvite() {
   const p = new URLSearchParams(location.hash.slice(1));
   if (!p.get("invite") || !p.get("api")) return;
+  history.replaceState(null, "", location.pathname + location.search);
+  if (!trustedApi(p.get("api")) || !/^[\w-]{20,80}$/.test(p.get("invite"))) return;     // never sign in to some other server
   saveConnection({ mode: "friend", key: p.get("invite"), api: p.get("api") });
   history.replaceState(null, "", location.pathname + location.search);
 })();
@@ -2951,14 +3039,14 @@ if (location.hash === "#settings") { state.view = "settings"; history.replaceSta
   const c = loadConnection();
   history.replaceState(null, "", location.pathname + location.search);
   if (c) { setTimeout(() => toast(c.mode === "friend" ? "You’re already in. Welcome back" : "That’s your join link. Share it with friends"), 600); return; }
-  state.join = { key: p.get("join"), api: p.get("api") || FRIENDS_API };
+  state.join = { key: p.get("join"), api: trustedApi(p.get("api")) ? p.get("api") : FRIENDS_API };
   joinInfo(state.join.api, state.join.key)
     .then((info) => { if (state.join) { state.join.info = info; render(); } })
     .catch((e) => { if (state.join && e.status === 403) { state.join.dead = e.message; render(); } });
 })();
 // A link pasted into an already-open tab only changes the #fragment: start over so it's read.
 addEventListener("hashchange", () => {
-  if (/#(join|invite|connect)=/.test(location.hash)) location.reload();
+  if (/#(join|invite|connect|add)=/.test(location.hash)) location.reload();
   else if (location.hash === "#settings") { history.replaceState(null, "", location.pathname + location.search); state.view = "settings"; render(); window.scrollTo({ top: 0 }); }
 });
 // "Sign in on another device" links carry the connection in the #fragment (never sent to any server).
@@ -2970,6 +3058,16 @@ addEventListener("hashchange", () => {
     if (j.o && j.r && j.t) saveConnection({ owner: j.o, repo: j.r, token: j.t });
   } catch { /* ignore a damaged link */ }
   history.replaceState(null, "", location.pathname + location.search);
+})();
+// "Add me" links: #add=<key> connects you with the friend who sent it.
+(function acceptAdd() {
+  const p = new URLSearchParams(location.hash.slice(1));
+  if (!p.get("add")) return;
+  history.replaceState(null, "", location.pathname + location.search);
+  const c = loadConnection();
+  if (!c) { setTimeout(() => toast("Join Filament first, then open that link again."), 600); return; }
+  if (c.mode !== "friend") { setTimeout(() => toast("You’re already connected with everyone you invite."), 600); return; }
+  state.pendingAdd = p.get("add").slice(0, 80);
 })();
 if (getOrder() === "nearest") setTimeout(locate, 800);
 const conn = loadConnection();

@@ -1253,3 +1253,7 @@ a.logit .lb-mark { flex: none; }
 .room .lamp[data-state="on"] { color: var(--brass-hi) !important; }
 .room .lamp[data-state="on"] svg { filter: drop-shadow(0 0 6px rgba(255,214,140,.75)); }
 .room .lamp[data-state="off"] { opacity: .55; }
+
+.people-btn { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 14px; margin: -6px 0 14px; border-radius: 17px;
+  border: 1px solid var(--line-2); background: transparent; color: var(--text); font: inherit; font-size: 15px; cursor: pointer; }
+.people-btn svg { width: 18px; height: 18px; }

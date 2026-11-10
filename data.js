@@ -12,6 +12,11 @@ const CFG_KEY = "filament.connection.v1";
 const CACHE_KEY = "filament.cache.v1";
 // The friends service (sign-up, sign-in links, feedback). Not personal data — just where the service lives.
 export const FRIENDS_API = "https://friends.filament-nyc.com";
+/** Only Filament's own friends service: a link can never point the app at another server. */
+export function trustedApi(u) {
+  try { const x = new URL(u); return x.protocol === "https:" && (x.origin === FRIENDS_API || /^filament-friends\.[a-z0-9-]+\.workers\.dev$/.test(x.hostname)); }
+  catch { return false; }
+}
 const FILES = ["settings.json", "status.json", "history.json", "listings.json", "catalog.json", "letterboxd.json", "people.json", "going.json", "social.json"];
 
 const safe = {
@@ -151,7 +156,7 @@ class LocalSource {
 
 /** A friend's app: talks to the friends service with their invite key — no GitHub account needed. */
 class FriendSource {
-  constructor({ api, key }) { Object.assign(this, { api: api.replace(/\/$/, ""), key }); this.label = "Your Filament"; this.friend = true; }
+  constructor({ api, key }) { Object.assign(this, { api: (trustedApi(api) ? api : FRIENDS_API).replace(/\/$/, ""), key }); this.label = "Your Filament"; this.friend = true; }
   async call(path, init = {}) {
     let res;
     try {
@@ -162,6 +167,9 @@ class FriendSource {
     if (!res.ok) throw new ApiError(j.message || `Filament said ${res.status}`, res.status);
     return j;
   }
+  async people() { return this.call("/api/people"); }
+  async peopleAction(body) { return this.call("/api/people", { method: "POST", body: JSON.stringify(body) }); }
+  async signout() { return this.call("/api/signout", { method: "POST", body: "{}" }); }
   async social(action) { return (await this.call("/api/social", { method: "POST", body: JSON.stringify(action) })).social; }
   async setGoing(key, on, seats) { return this.call("/api/going", { method: "POST", body: JSON.stringify({ key, on, seats }) }); }
   async verify() { const r = await this.call("/api/whoami"); this.name = r.name; this.id = r.id; this.owner = r.owner || ""; this.label = `${r.name}’s Filament`; return r; }
@@ -180,6 +188,7 @@ class FriendSource {
 /** Calls that work before anyone is signed in (joining, emailed sign-in links). */
 async function publicCall(api, path, init = {}) {
   let res;
+  if (!trustedApi(api)) api = FRIENDS_API;
   try { res = await fetch(`${api.replace(/\/$/, "")}${path}`, { ...init, cache: "no-store", headers: init.body ? { "Content-Type": "application/json" } : {} }); }
   catch { throw new ApiError("Can’t reach Filament right now. Check your connection and try again.", 0); }
   const j = await res.json().catch(() => ({}));
@@ -200,7 +209,7 @@ export async function loadAll(src) {
   const out = {};
   await Promise.all(FILES.map(async (f) => { out[f.replace(".json", "")] = await src.readFile(f).catch((e) => { if (f === "settings.json") throw e; return null; }); }));
   if (!src.friend && !isLocal()) {
-    [out.friends, out.feedback] = await Promise.all(["friends/index.json", "feedback.json"].map((f) => src.readFile(f).catch(() => null)));
+    [out.friends, out.feedback, out.circle] = await Promise.all(["friends/index.json", "feedback.json", "friends/circle.json"].map((f) => src.readFile(f).catch(() => null)));
   }
   safe.set(CACHE_KEY, { at: Date.now(), data: out });
   return out;
