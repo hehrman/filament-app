@@ -1,12 +1,12 @@
-import { creditIsDirector, fold, matchFilm, matchOccurrence, titleKey } from "./match.js?v=20261110032910";
+import { creditIsDirector, fold, matchFilm, matchOccurrence, titleKey } from "./match.js?v=20261110033238";
 import {
   ApiError, FRIENDS_API, cached, emailSignIn, forgetConnection, isLocal, joinFilament, joinInfo, letterboxdFeed, loadAll, loadConnection,
   makeSource, mutateSettings, saveConnection,
-} from "./data.js?v=20261110032910";
-import { followList, forYou, importExport, lookup, lovedDirectors, mergeFeed, recentlyWatched, stars } from "./letterboxd.js?v=20261110032910";
+} from "./data.js?v=20261110033238";
+import { followList, forYou, importExport, lookup, lovedDirectors, mergeFeed, recentlyWatched, stars } from "./letterboxd.js?v=20261110033238";
 import {
   filmographyFor, searchCatalog, searchWikidataDirectors, searchWikidataFilms, slugFromCatalog,
-} from "./search.js?v=20261110032910";
+} from "./search.js?v=20261110033238";
 
 const TZ = "America/New_York";
 const app = document.getElementById("app");
@@ -208,7 +208,7 @@ function screeningCard(d, { muted } = {}) {
       <span class="card__content">
       ${tag || fmt.length || seen ? `<span class="card__top">${tag ? `<span class="tag ${tag.cls}">${h(tag.text)}</span>` : ""}${fmt.map((x) => `<span class="tag tag--fmt">${h(x)}</span>`).join("")}${seen}</span>` : ""}
       ${films}
-      <span class="card__where"><span class="venue">${h(d.venue)}</span></span>
+      <span class="card__where"><span class="venue">${h(d.venue)}</span>${goingLine(d.key, true) ? `<span class="going-tag">${h(goingLine(d.key, true))}</span>` : ""}</span>
       <span class="times">${(d.showtimes?.length ? d.showtimes : ["Time TBA"]).map((t) => `<span class="time${fresh.has(t) ? " time--new" : ""}">${h(t)}</span>`).join("")}</span>
       </span>
     </span>
@@ -948,6 +948,7 @@ function openSheet(key) {
         <div class="card__meta">${h(meta)}</div>
         </div></div>
       </div>
+      ${goingLine(d.key) ? `<div class="sheet__section going-line">${h(goingLine(d.key))}</div>` : ""}
       <div class="sheet__section ww">
         <div class="ww__when"><b>${h(rel || fmtDay(d.date, { weekday: "long" }))}</b> <span>${h(fmtDay(d.date, rel ? { weekday: "long", month: "long", day: "numeric" } : { month: "long", day: "numeric", year: "numeric" }))}</span></div>
         <div class="ww__times">${(d.showtimes?.length ? d.showtimes : [null]).map((t) => `<button class="time time--btn" data-action="ics" data-key="${h(d.key)}" data-time="${h(t || "")}" aria-label="Add ${h(t || "this screening")} to your calendar">${h(t || "Time TBA")} ${ICON.calendar}</button>`).join("")}</div>
@@ -956,6 +957,7 @@ function openSheet(key) {
       </div>
       <div class="sheet__section"><div class="actions">
         ${d.ticket_url ? `<a class="btn btn--brass" href="${h(d.ticket_url)}" target="_blank" rel="noopener">${ticketLabel(d)}</a>` : ""}
+        <button class="btn${imGoing(d.key) ? " btn--on" : ""}" data-action="going" data-key="${h(d.key)}" aria-pressed="${imGoing(d.key)}">${imGoing(d.key) ? "✓ Going" : "I’m going"}</button>
         <button class="btn" data-action="share" data-key="${h(d.key)}">${ICON.share} Share</button>
         <a class="btn" href="${h(letterboxdURL(d.films[0]))}" target="_blank" rel="noopener">Letterboxd</a>
         <a class="btn" href="${h(d.film_url || d.listing_url)}" target="_blank" rel="noopener">Full listing</a>
@@ -989,6 +991,42 @@ function openDirector(id) {
           ${u ? `<div class="row__sub" style="color:var(--brass-hi)">${h(relDay(u.date) || fmtDay(u.date, { weekday: "short", month: "short", day: "numeric" }))} · ${h(u.venue)}</div>` : ""}</div>${u ? `<span aria-hidden="true">›</span></button>` : `</div>`}`;
       }).join("")}</div></div></div>`;
   dragToDismiss(sheetRoot.querySelector(".sheet"));
+}
+/* ------------------------------------------------------------ I'm going */
+const goingFor = (key) => D().going?.going?.[key] || [];
+const myGoingId = () => (isFriend() ? state.src.id || state.src.name : "owner");
+const imGoing = (key) => goingFor(key).some((g) => g.id === myGoingId());
+function goingLine(key, short) {
+  const list = goingFor(key);
+  if (!list.length) return "";
+  const me = list.some((g) => g.id === myGoingId());
+  const others = list.filter((g) => g.id !== myGoingId()).map((g) => g.name);
+  if (short) return me ? (others.length ? `You + ${others.length} going` : "You’re going") : others.length === 1 ? `${others[0]} is going` : `${others[0]} + ${others.length - 1} going`;
+  const names = [...(me ? ["You"] : []), ...others];
+  return names.length === 1 ? (me ? "You’re going" : `${names[0]} is going`) : `${names.slice(0, -1).join(", ")} and ${names.at(-1)} are going`;
+}
+async function toggleGoing(key) {
+  const on = !imGoing(key);
+  const name = isFriend() ? (state.src.name || "Friend").split(" ")[0] : (settings().owner_name || "Owner");
+  const doc = structuredClone(D().going || { going: {} });
+  doc.going = doc.going || {};
+  const list = (doc.going[key] || []).filter((g) => g.id !== myGoingId());
+  if (on) list.push({ id: myGoingId(), name, at: new Date().toISOString() });
+  if (list.length) doc.going[key] = list; else delete doc.going[key];
+  state.data = { ...state.data, going: doc };
+  reopenSheet(); render();
+  try {
+    if (isFriend()) await state.src.setGoing(key, on);
+    else if (!isLocal()) {
+      const fresh = (await state.src.readFile("going.json")) || { going: {} };
+      fresh.going = fresh.going || {};
+      const l2 = (fresh.going[key] || []).filter((g) => g.id !== "owner");
+      if (on) l2.push({ id: "owner", name, at: new Date().toISOString() });
+      if (l2.length) fresh.going[key] = l2; else delete fresh.going[key];
+      await state.src.writeFile("going.json", fresh, `${name}: ${on ? "going" : "not going"}`);
+    }
+    toast(on ? "You’re going. Friends who follow this will see it." : "Not going");
+  } catch (e) { toast(`Couldn’t save: ${e.message}`); }
 }
 function askCheck() {
   const t = fmtTime12((settings().schedule?.times || ["09:00"])[0]);
@@ -2015,6 +2053,7 @@ async function onAction(el, ev) {
   if (a === "fb-open") return openFeedback();
   if (a === "fb-kind") { el.parentElement.querySelectorAll("button").forEach((b) => { const on = b === el; b.setAttribute("aria-pressed", on); b.setAttribute("aria-checked", on); }); return; }
   if (a === "fb-done") return feedbackDone(el.dataset.id);
+  if (a === "going") return toggleGoing(el.dataset.key);
   if (a === "fg-more") { state.expanded = { ...(state.expanded || {}), [el.dataset.id]: true }; return render(); }
   if (a === "dir-open") return openDirector(el.dataset.id);
   if (a === "egg-try") { const x = SHOWCASE.find(([k]) => k === el.dataset.k); if (x) x[2](); return; }
@@ -2265,7 +2304,7 @@ function bindWelcome() {
 applyTheme();
 // Instant launch & offline: cache the app itself (never your data).
 if ("serviceWorker" in navigator && !isLocal()) {
-  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261110032910").catch(() => {}));
+  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261110033238").catch(() => {}));
 }
 // Friend invite links: #invite=<key>&api=<friends service> (the fragment never reaches any server).
 (function acceptInvite() {

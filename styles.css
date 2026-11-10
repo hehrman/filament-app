@@ -1026,3 +1026,8 @@ body { overscroll-behavior-y: contain; }
 .filters-more > summary { margin: 14px 4px 0; }
 .foryou__head .page-sub { margin-top: 2px; }
 .card { grid-template-columns: 1fr; }
+
+/* I'm going */
+.going-tag { font-size: 13px; font-weight: 600; color: var(--brass-hi); }
+.going-line { color: var(--brass-hi); font-weight: 600; padding-top: 0; }
+.btn--on { border-color: var(--brass); color: var(--brass-hi); }
