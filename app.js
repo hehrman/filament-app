@@ -1,12 +1,12 @@
-import { creditIsDirector, fold, matchFilm, matchOccurrence, titleKey } from "./match.js?v=20261110045908";
+import { creditIsDirector, fold, matchFilm, matchOccurrence, titleKey } from "./match.js?v=20261110050851";
 import {
   ApiError, FRIENDS_API, cached, emailSignIn, forgetConnection, isLocal, joinFilament, joinInfo, letterboxdFeed, loadAll, loadConnection,
   makeSource, mutateSettings, saveConnection,
-} from "./data.js?v=20261110045908";
-import { followList, forYou, importExport, lookup, lovedDirectors, mergeFeed, recentlyWatched, stars } from "./letterboxd.js?v=20261110045908";
+} from "./data.js?v=20261110050851";
+import { followList, forYou, importExport, lookup, lovedDirectors, mergeFeed, recentlyWatched, stars } from "./letterboxd.js?v=20261110050851";
 import {
   filmographyFor, searchCatalog, searchWikidataDirectors, searchWikidataFilms, slugFromCatalog,
-} from "./search.js?v=20261110045908";
+} from "./search.js?v=20261110050851";
 
 const TZ = "America/New_York";
 const app = document.getElementById("app");
@@ -1007,8 +1007,9 @@ function openSheet(key) {
         <a class="btn" href="${h(d.film_url || d.listing_url)}" target="_blank" rel="noopener">Full listing</a>
       </div>${d.ticket_url && seatHint() ? `<div class="seat-hint">${h(seatHint())}</div>` : ""}</div>
       ${goingLine(d.key) ? `<div class="sheet__section going-line">${h(goingLine(d.key))}</div>` : ""}
-      ${imGoing(d.key) ? `<div class="sheet__section seats-row"><form class="seats-form" data-key="${h(d.key)}"><input id="going-seats" name="seats" maxlength="24" placeholder="Your seats, e.g. G7–G8" value="${h(mySeats(d.key))}" aria-label="Your seats" autocomplete="off"><button class="btn btn--sm">Save</button></form>
-        <div class="ww__hint">Friends going too will see where you’re sitting.</div></div>` : ""}
+      ${imGoing(d.key) ? `<div class="sheet__section seats-row"><form class="seats-form" data-key="${h(d.key)}"><input id="going-seats" name="seats" maxlength="24" placeholder="Your seats, e.g. G7–G8" value="${h(mySeats(d.key) === "General admission" ? "" : mySeats(d.key))}" aria-label="Your seats" autocomplete="off"><button class="btn btn--sm">Save</button></form>
+        <button class="btn btn--sm btn--ghost ga-btn" data-action="going-ga" data-key="${h(d.key)}" aria-pressed="${mySeats(d.key) === "General admission"}">${mySeats(d.key) === "General admission" ? "✓ " : ""}General admission</button>
+        <div class="ww__hint">Friends going too will see where you’re sitting. No assigned seats? Tap General admission.</div></div>` : ""}
       ${facts.length ? `<div class="sheet__section"><dl class="facts">${facts.map(([k, v]) => `<dt>${h(k)}</dt><dd>${h(v).replace(/\n/g, "<br>")}</dd>`).join("")}</dl></div>` : ""}
       <div class="sheet__section"><div class="group-label" style="margin-top:0">Follow</div><div class="actions">${followButtons(d.films)}</div></div>
       ${evs.length || d.first_listed ? `<div class="sheet__section">${wireEl()}<div class="group-label" style="margin-top:14px">History</div><ul class="timeline">
@@ -1818,8 +1819,8 @@ function secretSearch(q) {
   else if (k === "the owls are not what they seem") {
     flicker();
     if (!reducedMotion()) { document.body.classList.add("owls"); setTimeout(() => document.body.classList.remove("owls"), 3200); }
-  } else if (k === "gotta light") {
-    document.querySelectorAll(".lamp").forEach((l, i) => setTimeout(() => blowLamp(l), i * 140));
+  } else if (k === "gotta light" || k === "got a light") {
+    gotALight();
   } else if (k === "asa nisi masa" || k === "8 and a half" || k === "otto e mezzo") {
     subtitle("Asa Nisi Masa");
     if (!reducedMotion()) overlay("ring", Array.from({ length: 12 }, (_, i) => `<span style="--i:${i}">${lamp("on")}</span>`).join(""), 6200);
@@ -1893,7 +1894,7 @@ const EGG_WORDS = {
   "days of being wild": () => EGGS.wkw("One minute before three."),
   "almodovar": EGGS.almodovar, "pedro almodovar": EGGS.almodovar, "all about my mother": EGGS.almodovar, "todo sobre mi madre": EGGS.almodovar,
   "volver": EGGS.almodovar, "women on the verge of a nervous breakdown": EGGS.almodovar, "talk to her": EGGS.almodovar,
-  "spielberg": EGGS.moon, "steven spielberg": EGGS.moon, "phone home": EGGS.moon, "et phone home": EGGS.moon, "et the extraterrestrial": EGGS.moon,
+  "spielberg": EGGS.moon, "steven spielberg": EGGS.moon, "phone home": EGGS.moon, "et phone home": EGGS.moon, "got a light": () => gotALight(), "et the extraterrestrial": EGGS.moon,
   "jaws": EGGS.jaws, "close encounters of the third kind": () => { subtitle("Re · Mi · Do · Do · Sol"); flicker(); },
   "fosse": EGGS.fosse, "bob fosse": EGGS.fosse, "all that jazz": EGGS.fosse, "cabaret": EGGS.fosse, "razzle dazzle": EGGS.fosse, "sweet charity": EGGS.fosse,
   "paul thomas anderson": EGGS.frogs, "magnolia": EGGS.frogs, "there will be blood": EGGS.milkshake, "i drink your milkshake": EGGS.milkshake,
@@ -1941,6 +1942,38 @@ function subtitle(text) {
   o.innerHTML = `<i class="bar bar--top"></i><p>${h(text)}</p><i class="bar bar--bottom"></i>`;
   document.body.append(o);
   setTimeout(() => o.remove(), 3400);
+}
+// Part 8: the woodsman's broadcast. Black and white, film grain, the lamps failing, radio static
+// (generated here, no recordings), and the line itself, slowly, three times.
+function gotALight() {
+  document.querySelectorAll(".lamp").forEach((l, i) => setTimeout(() => blowLamp(l), 500 + i * 220));
+  if (reducedMotion()) { subtitle("Got a light?"); return; }
+  document.body.classList.add("woodsman");
+  overlay("grain", "", 7000);
+  try { const v = new Audio("got-a-light.m4a?v=20261110050851"); v.volume = 0.9; v.play().catch(() => radioStatic(5)); } catch { radioStatic(5); }
+  setTimeout(() => subtitle("Got a light?"), 150);         // the line comes in the first second of the clip
+  setTimeout(() => document.body.classList.remove("woodsman"), 7200);
+}
+function radioStatic(seconds) {
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    const ac = new AC();
+    const len = Math.floor(ac.sampleRate * seconds);
+    const buf = ac.createBuffer(1, len, ac.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (0.55 + 0.45 * Math.sin(i / ac.sampleRate * 7.3));
+    const src = ac.createBufferSource(); src.buffer = buf;
+    const band = ac.createBiquadFilter(); band.type = "bandpass"; band.frequency.value = 1400; band.Q.value = 0.8;   // an old radio
+    const gain = ac.createGain();
+    gain.gain.setValueAtTime(0, ac.currentTime);
+    gain.gain.linearRampToValueAtTime(0.09, ac.currentTime + 0.6);
+    gain.gain.setValueAtTime(0.09, ac.currentTime + seconds - 1.2);
+    gain.gain.linearRampToValueAtTime(0, ac.currentTime + seconds);
+    src.connect(band).connect(gain).connect(ac.destination);
+    src.start();
+    src.onended = () => ac.close();
+  } catch { /* no sound is fine */ }
 }
 function overlay(cls, html, ms) {
   const o = document.createElement("div");
@@ -2180,6 +2213,7 @@ async function onAction(el, ev) {
   if (a === "fb-kind") { el.parentElement.querySelectorAll("button").forEach((b) => { const on = b === el; b.setAttribute("aria-pressed", on); b.setAttribute("aria-checked", on); }); return; }
   if (a === "fb-done") return feedbackDone(el.dataset.id);
   if (a === "going") return toggleGoing(el.dataset.key);
+  if (a === "going-ga") { const ga = mySeats(el.dataset.key) !== "General admission"; if (await saveGoing(el.dataset.key, true, ga ? "General admission" : "")) toast(ga ? "Marked general admission. Friends will know to look for you." : "Cleared"); return; }
   if (a === "seatpref") return saveSettings((s) => { s.seat_pref = { ...(s.seat_pref || {}), [el.dataset.k]: el.dataset.v }; }, "Seat preference", "Saved");
   if (a === "order") {
     try { localStorage.setItem("filament.order", el.dataset.v); } catch { /* ignore */ }
@@ -2367,12 +2401,15 @@ document.addEventListener("input", (ev) => {
   if (ev.target.id === "find") {
     state.find = ev.target.value;
     scheduleRender();
-    clearTimeout(secretSoon);                       // hidden things wait until you pause, so they never fire mid-word
-    secretSoon = setTimeout(() => secretSearch(state.find), 450);
+    clearTimeout(secretSoon);                       // hidden things wait until the keyboard is gone (see below)
+    if (!matchMedia("(hover: none)").matches) secretSoon = setTimeout(() => secretSearch(state.find), 900);   // desktop: a pause is enough
   }
   if (ev.target.id === "find" && ev.target.value.trim().length >= 3) rememberSearchSoon(ev.target.value.trim());
 });
+// Phones: a hidden thing plays once the keyboard closes (Search/Done tapped, or the field left).
+document.addEventListener("focusout", (ev) => { if (ev.target.id === "find" && state.find.trim()) setTimeout(() => secretSearch(state.find), 350); });
 document.addEventListener("keydown", (ev) => {
+  if (ev.target?.id === "find" && ev.key === "Enter") { ev.target.blur(); return; }
   if (ev.key === "Escape") {
     if (sheetRoot.innerHTML) closeSheet();
     else if (state.query) { state.query = ""; state.results = null; render(); }
@@ -2436,7 +2473,7 @@ function bindWelcome() {
 applyTheme();
 // Instant launch & offline: cache the app itself (never your data).
 if ("serviceWorker" in navigator && !isLocal()) {
-  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261110045908").catch(() => {}));
+  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261110050851").catch(() => {}));
 }
 // Friend invite links: #invite=<key>&api=<friends service> (the fragment never reaches any server).
 (function acceptInvite() {
