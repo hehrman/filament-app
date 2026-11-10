@@ -1,12 +1,12 @@
-import { creditIsDirector, fold, matchFilm, matchOccurrence, titleKey } from "./match.js?v=20261110161218";
+import { creditIsDirector, fold, matchFilm, matchOccurrence, titleKey } from "./match.js?v=20261110162704";
 import {
   ApiError, FRIENDS_API, trustedApi, cached, emailSignIn, forgetConnection, isLocal, joinFilament, joinInfo, letterboxdFeed, loadAll, loadConnection,
   makeSource, mutateSettings, saveConnection,
-} from "./data.js?v=20261110161218";
-import { followList, forYou, importExport, lookup, lovedDirectors, mergeFeed, recentlyWatched, stars } from "./letterboxd.js?v=20261110161218";
+} from "./data.js?v=20261110162704";
+import { followList, forYou, importExport, lookup, lovedDirectors, mergeFeed, recentlyWatched, stars } from "./letterboxd.js?v=20261110162704";
 import {
   filmographyFor, searchCatalog, searchWikidataDirectors, searchWikidataFilms, slugFromCatalog,
-} from "./search.js?v=20261110161218";
+} from "./search.js?v=20261110162704";
 
 const TZ = "America/New_York";
 const app = document.getElementById("app");
@@ -1199,7 +1199,7 @@ function planRow(r, who) {
       ${who ? `<span class="fgoing__who">${who}</span>` : ""}</span><span aria-hidden="true" class="fgoing__go">›</span></button>`;
 }
 function viewFriends() {
-  if (socialReady() && state.room && ROOMS[state.room]) return viewRoom(state.room);
+  if (socialReady() && state.room && ROOMS[state.room] && !isWide()) return viewRoom(state.room);
   const seg = socialReady() ? (state.friendsSeg || (() => { try { return localStorage.getItem("filament.friends.seg"); } catch { return null; } })() || "lobby") : "plans";
   const plans = friendsPlans();
   const mine = plans.filter((r) => r.me);
@@ -1211,7 +1211,7 @@ function viewFriends() {
     <header class="page-head"><div><h1 class="page-title">Friends</h1><p class="page-sub">${seg === "lobby" ? "Talk films with your people" : "Who’s going to what, and where they’re sitting"}</p></div></header>
     ${socialReady() && !isLocal() ? `<button class="people-btn" data-action="people">${ICON.friends}<span>People</span></button>` : ""}
     ${socialReady() ? `<div class="seg seg--wide" role="tablist">${[["lobby", "Lobby"], ["plans", "Plans"]].map(([k, l]) => `<button data-action="friends-seg" data-v="${k}" role="tab" aria-pressed="${seg === k}" aria-selected="${seg === k}">${l}${k === "lobby" && lobbyUnread() ? ` <i class="seg__dot" aria-label="new"></i>` : ""}</button>`).join("")}</div>` : ""}
-    ${seg === "lobby" ? lobbyBlock() : `${pollsBlock()}
+    ${seg === "lobby" ? (isWide() ? lobbyWide() : lobbyBlock()) : `${pollsBlock()}
     <h2 class="settings-section">Your plans</h2>
     ${mine.length ? `<div class="fgoing">${mine.map((r) => planRow(r, `You${r.me.seats ? ` <span class="fgoing__seat">${h(r.me.seats)}</span>` : ""}${r.others.length ? ` · with ${names(r)}` : ""}`)).join("")}</div>`
       : `<p class="settings-lede">Tap <b>I’m going</b> on any screening. It shows here, and friends who see that screening will know. Add your seats once you’ve booked so they can sit nearby.</p>`}
@@ -1266,9 +1266,12 @@ function applySocial(doc, who, a, today) {
     if (!doc.comments[a.key].length) delete doc.comments[a.key];
   } else if (a.type === "say") {
     const text = clean(a.text, 600);
-    if (!LOBBY_ROOMS.includes(a.room) || !text) return "Write something first";
+    const ref = KEY.test(a.ref || "") ? a.ref : null;                       // a screening shared into the room
+    if (!LOBBY_ROOMS.includes(a.room) || (!text && !ref)) return "Write something first";
     const list = doc.rooms[a.room] || (doc.rooms[a.room] = []);
-    list.push({ id: rid(), by: who.id, name: who.name, at: now, text });
+    const to = a.reply ? list.find((x) => x.id === a.reply) : null;        // replying quotes a line of the original
+    list.push({ id: rid(), by: who.id, name: who.name, at: now, text, ...(ref ? { ref } : {}),
+      ...(to ? { reply: { id: to.id, by: to.by, name: to.name, text: (to.text || "").slice(0, 90) } } : {}) });
     if (list.length > 300) doc.rooms[a.room] = list.slice(-300);            // the room keeps its last 300 messages
   } else if (a.type === "unsay") {
     const list = doc.rooms[a.room] || [];
@@ -1348,22 +1351,58 @@ const pollFor = (key) => socialDoc().polls.find((p) => p.options.includes(key));
 const shortWhen = (date) => (date === todayISO() ? "Tonight" : daysFrom(date) === 1 ? "Tomorrow" : fmtDay(date, { weekday: "short", month: "short", day: "numeric" }));
 // Friends get comments once the friends service knows about them (social.json readable).
 const socialReady = () => !isFriend() || !!D().social;
-/* Messages (screening comments and the Lobby) look and behave the same:
-   tap a message for Tapback-style reactions, and Delete if it's yours. */
+/* Messages: a modern message board (Discord's layout, iMessage's touches).
+   Avatar and name start a run of messages; follow-ons from the same person sit under it.
+   Tap a message for Tapback reactions, Reply, Copy, and Delete if it's yours. */
 const ago = (ts) => { const m = Math.round((Date.now() - new Date(ts)) / 6e4); return m < 1 ? "now" : m < 60 ? `${m}m` : m < 1440 ? `${Math.round(m / 60)}h` : m < 10080 ? `${Math.round(m / 1440)}d` : fmtDay(nyDate(new Date(ts)), { month: "short", day: "numeric" }); };
-function messageEl(m, where, prev) {
+const clock = (ts) => new Intl.DateTimeFormat("en-US", { timeZone: TZ, hour: "numeric", minute: "2-digit" }).format(new Date(ts));
+function dayLabel(ts) {
+  const d = nyDate(new Date(ts)), n = daysFrom(d);
+  return n === 0 ? "Today" : n === -1 ? "Yesterday" : fmtDay(d, { weekday: "long", month: "short", day: "numeric" });
+}
+const AV_HUES = [32, 14, 205, 165, 275, 340, 95, 48];
+const avHue = (s) => { let x = 7; for (const c of String(s)) x = (x * 31 + c.charCodeAt(0)) >>> 0; return AV_HUES[x % AV_HUES.length]; };
+const avatarFor = (m) => `<span class="post__av" style="--h:${avHue(m.by)}" aria-hidden="true">${h((m.name || "?").trim().charAt(0).toUpperCase())}</span>`;
+const SEND_ICON = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M6 11l6-6 6 6"/></svg>`;
+function refCard(key) {
+  const o = D().listings?.occurrences?.[key] || D().history?.discoveries?.[key];
+  if (!o) return `<span class="post__card post__card--gone">A screening that has passed</span>`;
+  return `<button class="post__card" data-action="open" data-key="${h(key)}">${posterImg(o.poster, "post__poster") || `<span class="post__poster plywood" aria-hidden="true"></span>`}
+    <span><b>${h(o.films.map((f) => f.title).join(" + "))}</b><span>${h(shortWhen(o.date))}${o.showtimes?.[0] ? ` · ${h(o.showtimes[0])}` : ""} · ${h(o.venue)}</span></span><span aria-hidden="true" class="post__go">›</span></button>`;
+}
+function postEl(m, where, prev) {
   const ref = where.room ? `data-room="${h(where.room)}"` : `data-key="${h(where.key)}"`;
+  const mine = m.by === myGoingId();
   const open = state.reactOpen === `${where.room || where.key}|${m.id}`;
-  const same = prev && prev.by === m.by && new Date(m.at) - new Date(prev.at) < 10 * 6e4;     // follow-ons stay quiet
+  const grouped = prev && prev.by === m.by && nyDate(new Date(prev.at)) === nyDate(new Date(m.at)) && new Date(m.at) - new Date(prev.at) < 7 * 6e4 && !m.reply;
   const re = Object.entries(m.re || {});
-  return `<li class="msg${same ? " msg--cont" : ""}">
-    ${same ? "" : `<div class="msg__head"><b>${h(m.by === myGoingId() ? "You" : m.name)}</b><span>${ago(m.at)}</span></div>`}
-    <button class="msg__text" data-action="react-open" ${ref} data-id="${h(m.id)}" aria-expanded="${open}">${h(m.text).replace(/\n/g, "<br>")}</button>
-    ${re.length ? `<div class="msg__re">${re.map(([e, who]) => `<button class="re" data-action="react" ${ref} data-id="${h(m.id)}" data-e="${e}" aria-pressed="${who.some((x) => x.id === myGoingId())}" title="${h(who.map((x) => (x.id === myGoingId() ? "You" : x.name)).join(", "))}">${e}${who.length > 1 ? ` ${who.length}` : ""}</button>`).join("")}</div>` : ""}
-    ${open ? `<div class="tapback" role="menu">${REACTIONS.map((e) => `<button data-action="react" ${ref} data-id="${h(m.id)}" data-e="${e}" role="menuitem" aria-label="React ${e}">${e}</button>`).join("")}${m.by === myGoingId() || !isFriend() ? `<button class="tapback__del" data-action="${where.room ? "unsay" : "uncomment"}" ${ref} data-id="${h(m.id)}" role="menuitem">Delete</button>` : ""}</div>` : ""}
+  const who = mine ? "You" : m.name;
+  return `<li class="post${grouped ? " post--cont" : ""}${mine ? " post--mine" : ""}${open ? " post--open" : ""}" id="post-${h(m.id)}">
+    ${grouped ? `<time class="post__hover">${clock(m.at)}</time>` : avatarFor(m)}
+    <div class="post__body">
+      ${grouped ? "" : `<div class="post__head"><b>${h(who)}</b><time>${clock(m.at)}</time></div>`}
+      ${m.reply ? `<button class="post__reply" data-action="jump" data-id="${h(m.reply.id || "")}">${m.reply.hidden ? "Replying to a message" : `<b>${h(m.reply.by === myGoingId() ? "You" : m.reply.name)}</b> ${h(m.reply.text)}`}</button>` : ""}
+      ${m.text ? `<button class="post__text" data-action="react-open" ${ref} data-id="${h(m.id)}" aria-expanded="${open}">${h(m.text).replace(/\n/g, "<br>")}</button>` : ""}
+      ${m.ref ? refCard(m.ref) : ""}
+      ${re.length ? `<div class="post__re">${re.map(([e, w]) => `<button class="re" data-action="react" ${ref} data-id="${h(m.id)}" data-e="${e}" aria-pressed="${w.some((x) => x.id === myGoingId())}" title="${h(w.map((x) => (x.id === myGoingId() ? "You" : x.name)).join(", "))}">${e}${w.length > 1 ? `<span>${w.length}</span>` : ""}</button>`).join("")}</div>` : ""}
+      ${open ? `<div class="tapback" role="menu">
+        <div class="tapback__row">${REACTIONS.map((e) => `<button data-action="react" ${ref} data-id="${h(m.id)}" data-e="${e}" role="menuitem" aria-label="React ${e}">${e}</button>`).join("")}</div>
+        <div class="tapback__acts">${where.room ? `<button data-action="reply" ${ref} data-id="${h(m.id)}" role="menuitem">Reply</button>` : ""}${m.text ? `<button data-action="copy-msg" ${ref} data-id="${h(m.id)}" role="menuitem">Copy</button>` : ""}${mine || !isFriend() ? `<button class="tapback__del" data-action="${where.room ? "unsay" : "uncomment"}" ${ref} data-id="${h(m.id)}" role="menuitem">Delete</button>` : ""}</div>
+      </div>` : ""}
+    </div>
   </li>`;
 }
-const messagesEl = (list, where) => `<ul class="msgs">${list.map((m, i) => messageEl(m, where, list[i - 1])).join("")}</ul>`;
+function messagesEl(list, where, newSince) {
+  let day = "", out = "", marked = false;
+  list.forEach((m, i) => {
+    let brk = false;
+    const d = dayLabel(m.at);
+    if (d !== day) { out += `<li class="sep"><span>${h(d)}</span></li>`; day = d; brk = true; }
+    if (newSince != null && !marked && m.at > newSince && m.by !== myGoingId()) { out += `<li class="sep sep--new"><span>New</span></li>`; marked = true; brk = true; }
+    out += postEl(m, where, brk || !i ? null : list[i - 1]);   // after a divider, the name and avatar show again
+  });
+  return `<ul class="board">${out}</ul>`;
+}
 
 const ROOMS = {
   "tonight": ["Tonight", "Who’s going out, spare tickets, last-minute plans"],
@@ -1383,13 +1422,39 @@ function markRoomSeen(room) {
 }
 const roomUnread = (room) => { const seen = lobbySeen()[room] || ""; return (socialDoc().rooms?.[room] || []).some((m) => m.at > seen && m.by !== myGoingId()); };
 const lobbyUnread = () => socialReady() && !!D().social && LOBBY_ROOMS.some(roomUnread);
-function lobbyBlock() {
-  return `<div class="group lobby">${LOBBY_ROOMS.map((r) => {
+function roomsList(active) {
+  return `<div class="rooms">${LOBBY_ROOMS.map((r) => {
     const last = (socialDoc().rooms?.[r] || []).slice(-1)[0];
-    return `<button class="row row--link room" data-action="room" data-room="${r}">${lamp(roomUnread(r) ? "on" : "off")}
-      <div class="row__main"><div class="row__title">${h(ROOMS[r][0])}</div><div class="row__sub">${last ? `${h(last.by === myGoingId() ? "You" : last.name)}: ${h(last.text.slice(0, 80))}` : h(ROOMS[r][1])}</div></div>
-      ${last ? `<span class="room__ago">${ago(last.at)}</span>` : ""}<span aria-hidden="true">›</span></button>`; }).join("")}</div>
-    <p class="group-foot">A lit lamp means something new since you last looked.</p>`;
+    const unread = roomUnread(r);
+    return `<button class="roomrow${unread ? " roomrow--new" : ""}${active === r ? " roomrow--on" : ""}" data-action="room" data-room="${r}" ${active === r ? 'aria-current="true"' : ""}>${lamp(unread ? "on" : "off")}
+      <span class="roomrow__main"><b>${h(ROOMS[r][0])}</b><span>${last ? `${h(last.by === myGoingId() ? "You" : last.name)}: ${h(last.text || "shared a screening")}` : h(ROOMS[r][1])}</span></span>
+      ${last ? `<time>${ago(last.at)}</time>` : ""}</button>`; }).join("")}</div>`;
+}
+function lobbyBlock() {
+  return `${roomsList(null)}<p class="group-foot">A lit lamp means something new since you last looked.</p>`;
+}
+const isWide = () => matchMedia("(min-width: 861px)").matches;
+function composerEl(r) {
+  const rep = state.replyTo && state.replyTo.room === r ? state.replyTo : null;
+  return `<form class="composer" data-room="${r}">
+    ${rep ? `<div class="composer__reply"><span>Replying to <b>${h(rep.by === myGoingId() ? "yourself" : rep.name)}</b></span><button type="button" data-action="reply-cancel" aria-label="Cancel reply">${ICON.close}</button></div>` : ""}
+    <div class="composer__row"><input id="say-${r}" name="text" maxlength="600" placeholder="Message ${h(ROOMS[r][0])}" autocomplete="off" enterkeyhint="send" aria-label="Message"><button class="composer__send" aria-label="Send">${SEND_ICON}</button></div>
+  </form>`;
+}
+function roomPane(r) {
+  const list = socialDoc().rooms?.[r] || [];
+  return `<div class="pane__head"><h2>${h(ROOMS[r][0])}</h2><span>${h(ROOMS[r][1])}</span></div>
+    ${list.length ? messagesEl(list, { room: r }, state.roomSeenBefore?.[r]) : `<div class="board__empty">${lamp("off", true)}<p>Nothing in ${h(ROOMS[r][0])} yet. Start it off.</p></div>`}
+    ${composerEl(r)}`;
+}
+function lobbyWide() {
+  const r = state.room && ROOMS[state.room] ? state.room : "tonight";
+  if (state.room !== r) { state.room = r; enterRoom(r); }
+  return `<div class="lobby2"><nav class="lobby2__rooms" aria-label="Rooms">${roomsList(r)}</nav><section class="lobby2__chat">${roomPane(r)}</section></div>`;
+}
+function enterRoom(r) {
+  state.roomSeenBefore = { ...(state.roomSeenBefore || {}), [r]: lobbySeen()[r] || "" };
+  markRoomSeen(r);
 }
 /* People. Friends add each other with a personal link (no list of members, ever).
    The owner sees everyone they invited and can keep two people apart. */
@@ -1445,12 +1510,7 @@ async function saveCircle(fn, msg) {
 }
 
 function viewRoom(r) {
-  const list = socialDoc().rooms?.[r] || [];
-  return `<div class="page room-page">
-    <header class="page-head"><div><button class="back" data-action="room-back">‹ Lobby</button><h1 class="page-title">${h(ROOMS[r][0])}</h1><p class="page-sub">${h(ROOMS[r][1])}</p></div></header>
-    ${list.length ? messagesEl(list, { room: r }) : `<p class="settings-lede">Nothing here yet. Say hello.</p>`}
-    <form class="composer" data-room="${r}"><input id="say-${r}" name="text" maxlength="600" placeholder="Message ${h(ROOMS[r][0])}" autocomplete="off" aria-label="Message"><button class="btn btn--sm btn--brass">Send</button></form>
-  </div>`;
+  return `<div class="page room-page"><button class="back" data-action="room-back">‹ Lobby</button>${roomPane(r)}</div>`;
 }
 
 function commentsBlock(d) {
@@ -1463,6 +1523,7 @@ function commentsBlock(d) {
     <form class="talk__form" data-key="${h(d.key)}"><input name="text" maxlength="280" placeholder="${list.length ? "Add a comment" : "Say something to friends"}" autocomplete="off" aria-label="Comment"><button class="btn btn--sm">Post</button></form>
     ${poll ? `<button class="linkish talk__poll" data-action="nav" data-view="friends" data-seg="plans">${h(poll.by === myGoingId() ? "You" : poll.name)} asked which night works ›</button>`
       : nights.length >= 2 ? `<button class="linkish talk__poll" data-action="poll-new" data-key="${h(d.key)}">Not sure which night? Ask friends</button>` : ""}
+    <button class="linkish talk__poll" data-action="share-lobby" data-key="${h(d.key)}">Share to the Lobby</button>
   </div>`;
 }
 function pollsBlock() {
@@ -1479,6 +1540,14 @@ function pollsBlock() {
 }
 
 function scrollRoomToEnd() { if (state.room) requestAnimationFrame(() => window.scrollTo({ top: document.documentElement.scrollHeight })); }
+function openShareLobby(key) {
+  sheetRoot.innerHTML = `<div class="scrim" data-action="close-sheet"></div>
+    <div class="sheet sheet--small" role="dialog" aria-modal="true" aria-labelledby="sl-title"><div class="sheet__grab"></div>
+      <div class="sheet__hero"><button class="icon-btn sheet__close" data-action="close-sheet" aria-label="Close">${ICON.close}</button>
+        <h2 class="sheet__title" id="sl-title">Share to the Lobby</h2></div>
+      <div class="sheet__section"><div class="rooms">${LOBBY_ROOMS.map((r) => `<button class="roomrow" data-action="share-to-room" data-room="${r}" data-key="${h(key)}">${lamp("off")}<span class="roomrow__main"><b>${h(ROOMS[r][0])}</b><span>${h(ROOMS[r][1])}</span></span></button>`).join("")}</div></div></div>`;
+  dragToDismiss(sheetRoot.querySelector(".sheet"));
+}
 let lobbyTimer = null;
 function startLobbyRefresh() {
   if (lobbyTimer) return;
@@ -1751,7 +1820,9 @@ document.addEventListener("submit", async (ev) => {
     const input = cf.querySelector("input"), text = String(input.value || "").trim();
     if (!text) return;
     input.value = "";
-    if (await saveSocial({ type: "say", room: cf.dataset.room, text })) { markRoomSeen(cf.dataset.room); scrollRoomToEnd(); }
+    const reply = state.replyTo && state.replyTo.room === cf.dataset.room ? state.replyTo.id : undefined;
+    state.replyTo = null;
+    if (await saveSocial({ type: "say", room: cf.dataset.room, text, reply })) { markRoomSeen(cf.dataset.room); scrollRoomToEnd(); }
     else input.value = text;
     return;
   }
@@ -2127,14 +2198,16 @@ function rememberSearchSoon(q) {
 }
 
 /* --------------------------------------------------------- what's new */
-const WHATS_NEW = { id: "2026-11-friends-4", items: [
-  ["Friends, together", "See which screenings your friends are going to. Tap “I’m going” to join them, share your seats so you sit together, and get a heads-up when a friend is going to something you love. It all lives in the new Friends tab."],
-  ["For you", "Picks that know your taste, learned from your Letterboxd ratings. Each one tells you exactly why."],
-  ["Letterboxd in one step", "Just your username, and every film you’ve rated ★★★★½ or higher is followed for you."],
-  ["Plan the night in one tap", "Tap a showtime and it’s in your calendar. Tap the theater for directions. Alamo, Metrograph and Nitehawk open straight to their seat maps."],
-  ["Something’s hiding", "A few directors are tucked away in here. Start with About & Help → Things to try."],
+const WHATS_NEW = { id: "2026-11-lobby-1", items: [
+  ["The Lobby", "Five rooms to talk films with your people: Tonight, Just Saw, Recommendations, Deep Cuts and Intermission. Reply, react, or share a screening right into the conversation. A lamp lights up when there’s something new."],
+  ["Go together", "See who’s going right on each screening. Tap “I’m going”, add your seats, comment, or ask which night works for everyone."],
+  ["Just your people", "Only people you’re connected with see your plans and messages. Add a friend with your own link in Friends → People."],
+  ["Find the right night", "Filter Now Showing by genre, decade, format or theater, or hide what you’ve already seen."],
+  ["For you", "Picks that know your taste, learned from your Letterboxd ratings. Each one tells you why."],
+  ["Something’s hiding", "Now with sound. Start with About & Help → Things to try."],
 ] };
 function maybeWhatsNew() {
+  if (isFriend() && !D().social) return;               // wait until the Lobby is switched on for friends
   let seen = null;
   try { seen = localStorage.getItem("filament.whatsnew"); } catch { return; }
   try { localStorage.setItem("filament.whatsnew", WHATS_NEW.id); } catch { /* ignore */ }
@@ -2445,7 +2518,7 @@ function gotALight() {
   if (reducedMotion()) { subtitle("Got a light?"); return; }
   document.body.classList.add("woodsman");
   overlay("grain", "", 7000);
-  try { const v = new Audio("got-a-light.m4a?v=20261110161218"); v.volume = 0.9; v.play().catch(() => radioStatic(5)); } catch { radioStatic(5); }
+  try { const v = new Audio("got-a-light.m4a?v=20261110162704"); v.volume = 0.9; v.play().catch(() => radioStatic(5)); } catch { radioStatic(5); }
   setTimeout(() => subtitle("Got a light?"), 150);         // the line comes in the first second of the clip
   setTimeout(() => document.body.classList.remove("woodsman"), 7200);
 }
@@ -2822,11 +2895,29 @@ async function onAction(el, ev) {
     try { await navigator.clipboard.writeText(link); toast("Link copied. Send it to a friend on Filament."); } catch { prompt("Send this link to a friend on Filament:", link); }
     return;
   }
-  if (a !== "react-open" && a !== "react" && state.reactOpen) state.reactOpen = null;
+  if (!["react-open", "react", "reply", "copy-msg"].includes(a) && state.reactOpen) { state.reactOpen = null; if (a !== "close-sheet") { reopenSheet(); render(); } }
   if (a === "react-open") { const k = `${el.dataset.room || el.dataset.key}|${el.dataset.id}`; state.reactOpen = state.reactOpen === k ? null : k; reopenSheet(); render(); return; }
   if (a === "react") { state.reactOpen = null; return saveSocial({ type: "react", room: el.dataset.room, key: el.dataset.key, id: el.dataset.id, emoji: el.dataset.e }); }
   if (a === "unsay") { state.reactOpen = null; return saveSocial({ type: "unsay", room: el.dataset.room, id: el.dataset.id }); }
-  if (a === "room") { state.room = el.dataset.room; markRoomSeen(state.room); state.enter = true; startLobbyRefresh(); return transition(() => { render(); scrollRoomToEnd(); }); }
+  if (a === "room") {
+    state.room = el.dataset.room; enterRoom(state.room); startLobbyRefresh();
+    if (isWide()) { render(); return scrollRoomToEnd(); }
+    state.enter = true; return transition(() => { render(); scrollRoomToEnd(); });
+  }
+  if (a === "reply") { const m = (socialDoc().rooms?.[el.dataset.room] || []).find((x) => x.id === el.dataset.id); state.reactOpen = null; if (m) state.replyTo = { room: el.dataset.room, id: m.id, by: m.by, name: m.name }; render(); document.getElementById(`say-${el.dataset.room}`)?.focus(); return; }
+  if (a === "reply-cancel") { state.replyTo = null; return render(); }
+  if (a === "copy-msg") { const list = el.dataset.room ? socialDoc().rooms?.[el.dataset.room] : socialDoc().comments?.[el.dataset.key]; const m = (list || []).find((x) => x.id === el.dataset.id); state.reactOpen = null; reopenSheet(); render(); try { await navigator.clipboard.writeText(m?.text || ""); toast("Copied"); } catch { /* not allowed here */ } return; }
+  if (a === "jump") { const n = document.getElementById(`post-${el.dataset.id}`); if (n) { n.scrollIntoView({ behavior: "smooth", block: "center" }); n.classList.add("post--flash"); setTimeout(() => n.classList.remove("post--flash"), 1200); } return; }
+  if (a === "share-lobby") return openShareLobby(el.dataset.key);
+  if (a === "share-to-room") {
+    const key = el.dataset.key, room = el.dataset.room;
+    closeSheet();
+    if (await saveSocial({ type: "say", room, ref: key, text: "" })) {
+      state.view = "friends"; state.friendsSeg = "lobby"; state.room = room; enterRoom(room); startLobbyRefresh();
+      render(); scrollRoomToEnd(); toast(`Shared to ${ROOMS[room][0]}`);
+    }
+    return;
+  }
   if (a === "room-back") { state.room = null; state.enter = true; return transition(() => { render(); window.scrollTo({ top: 0 }); }); }
   if (a === "friends-seg") { state.friendsSeg = el.dataset.v; try { localStorage.setItem("filament.friends.seg", el.dataset.v); } catch { /* this device only */ } if (el.dataset.v === "lobby") startLobbyRefresh(); return render(); }
   if (a === "uncomment") { state.reactOpen = null; return saveSocial({ type: "uncomment", key: el.dataset.key, id: el.dataset.id }); }
@@ -3019,7 +3110,7 @@ function bindWelcome() {
 applyTheme();
 // Instant launch & offline: cache the app itself (never your data).
 if ("serviceWorker" in navigator && !isLocal()) {
-  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261110161218").catch(() => {}));
+  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261110162704").catch(() => {}));
 }
 // Friend invite links: #invite=<key>&api=<friends service> (the fragment never reaches any server).
 (function acceptInvite() {
