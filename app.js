@@ -1,12 +1,12 @@
-import { creditIsDirector, fold, matchFilm, matchOccurrence, titleKey } from "./match.js?v=20261110034217";
+import { creditIsDirector, fold, matchFilm, matchOccurrence, titleKey } from "./match.js?v=20261110034703";
 import {
   ApiError, FRIENDS_API, cached, emailSignIn, forgetConnection, isLocal, joinFilament, joinInfo, letterboxdFeed, loadAll, loadConnection,
   makeSource, mutateSettings, saveConnection,
-} from "./data.js?v=20261110034217";
-import { followList, forYou, importExport, lookup, lovedDirectors, mergeFeed, recentlyWatched, stars } from "./letterboxd.js?v=20261110034217";
+} from "./data.js?v=20261110034703";
+import { followList, forYou, importExport, lookup, lovedDirectors, mergeFeed, recentlyWatched, stars } from "./letterboxd.js?v=20261110034703";
 import {
   filmographyFor, searchCatalog, searchWikidataDirectors, searchWikidataFilms, slugFromCatalog,
-} from "./search.js?v=20261110034217";
+} from "./search.js?v=20261110034703";
 
 const TZ = "America/New_York";
 const app = document.getElementById("app");
@@ -2304,7 +2304,7 @@ function bindWelcome() {
 applyTheme();
 // Instant launch & offline: cache the app itself (never your data).
 if ("serviceWorker" in navigator && !isLocal()) {
-  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261110034217").catch(() => {}));
+  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261110034703").catch(() => {}));
 }
 // Friend invite links: #invite=<key>&api=<friends service> (the fragment never reaches any server).
 (function acceptInvite() {
@@ -2313,6 +2313,8 @@ if ("serviceWorker" in navigator && !isLocal()) {
   saveConnection({ mode: "friend", key: p.get("invite"), api: p.get("api") });
   history.replaceState(null, "", location.pathname + location.search);
 })();
+// Email footers link to #settings: open straight on Settings.
+if (location.hash === "#settings") { state.view = "settings"; history.replaceState(null, "", location.pathname + location.search); }
 // Join links: #join=<shared key>[&api=<friends service>] → a one-step sign-up.
 (function acceptJoin() {
   const p = new URLSearchParams(location.hash.slice(1));
@@ -2326,7 +2328,10 @@ if ("serviceWorker" in navigator && !isLocal()) {
     .catch((e) => { if (state.join && e.status === 403) { state.join.dead = e.message; render(); } });
 })();
 // A link pasted into an already-open tab only changes the #fragment: start over so it's read.
-addEventListener("hashchange", () => { if (/#(join|invite|connect)=/.test(location.hash)) location.reload(); });
+addEventListener("hashchange", () => {
+  if (/#(join|invite|connect)=/.test(location.hash)) location.reload();
+  else if (location.hash === "#settings") { history.replaceState(null, "", location.pathname + location.search); state.view = "settings"; render(); window.scrollTo({ top: 0 }); }
+});
 // "Sign in on another device" links carry the connection in the #fragment (never sent to any server).
 (function acceptDeviceLink() {
   const m = /#connect=([A-Za-z0-9+/=]+)/.exec(location.hash);
