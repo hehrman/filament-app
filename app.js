@@ -1,12 +1,12 @@
-import { creditIsDirector, fold, matchFilm, matchOccurrence, titleKey } from "./match.js?v=20261110001015";
+import { creditIsDirector, fold, matchFilm, matchOccurrence, titleKey } from "./match.js?v=20261110001939";
 import {
   ApiError, FRIENDS_API, cached, emailSignIn, forgetConnection, isLocal, joinFilament, joinInfo, letterboxdFeed, loadAll, loadConnection,
   makeSource, mutateSettings, saveConnection,
-} from "./data.js?v=20261110001015";
-import { followList, forYou, importExport, lookup, lovedDirectors, mergeFeed, recentlyWatched, stars } from "./letterboxd.js?v=20261110001015";
+} from "./data.js?v=20261110001939";
+import { followList, forYou, importExport, lookup, lovedDirectors, mergeFeed, recentlyWatched, stars } from "./letterboxd.js?v=20261110001939";
 import {
   filmographyFor, searchCatalog, searchWikidataDirectors, searchWikidataFilms, slugFromCatalog,
-} from "./search.js?v=20261110001015";
+} from "./search.js?v=20261110001939";
 
 const TZ = "America/New_York";
 const app = document.getElementById("app");
@@ -252,6 +252,10 @@ function consoleBlock() {
     lampState = "on";
     const n = run.new || 0, u = run.updated || 0;
     headline = n ? `Found ${plural(n, "new screening")}` : u ? `${plural(u, "update")} to screenings you follow` : "Nothing new";
+    if (isFriend()) {                    // the shared status can't know a friend's own news: say what's ahead for them
+      const ahead = state.data ? upcomingItems().filter((d) => d.status === "active").length : 0;
+      headline = ahead ? `${plural(ahead, "screening")} you follow coming up` : "Watching New York for you";
+    }
   } else if (run && !run.ok) { lampState = "error"; headline = "The last check didn’t finish"; }
   if (run) meta.push(`Checked <b>${h(fmtWhen(run.finished || run.started))}</b>`);
   const next = nextCheckISO();
@@ -689,76 +693,79 @@ function viewSettings() {
   const sw = (key, on, lbl) => `<label class="switch"><input type="checkbox" data-action="notif" data-key="${key}" ${on ? "checked" : ""} aria-label="${h(lbl)}"><span></span></label>`;
   const prov = st.email_provider;
   const runs = (st.runs || []).slice(0, 8);
+  const row = (title, sub, end = "") => `<div class="row"><div class="row__main"><div class="row__title">${title}</div>${sub ? `<div class="row__sub">${sub}</div>` : ""}</div>${end}</div>`;
+  const owner = !isFriend() && !isLocal();
   return `<div class="page">
     <header class="page-head"><div><div class="eyebrow">Preferences</div><h1 class="page-title">Settings</h1></div></header>
 
-    <div class="group-label">Email notifications</div>
+    <h2 class="settings-section">Alerts</h2>
+    <p class="settings-lede">Filament tells you the moment something you follow is scheduled in New York. Choose how, and what about.</p>
+
+    <div class="group-label">On your phone</div>
+    ${pushBlock()}
+
+    <div class="group-label">By email</div>
     <div class="group">
-      <div class="row"><div class="row__main"><div class="row__title">Email alerts</div><div class="row__sub">At most one email a day, only when something changed</div></div>${sw("email_enabled", n.email_enabled !== false, "Email alerts")}</div>
-      <div class="row"><div class="row__main"><div class="row__title">Send to</div><div class="row__sub">${isFriend() ? "Where your alerts go" : "Leave empty to use the address saved in GitHub"}</div></div>
-        <input type="email" id="recipient" value="${h(n.recipient || "")}" placeholder="you@example.com" style="width:min(240px,46vw)"></div>
-      <div class="row"><div class="row__main"><div class="row__title">New screenings</div><div class="row__sub">A film you follow appears on the calendar</div></div>${sw("notify_new", n.notify_new !== false, "New screenings")}</div>
-      <div class="row"><div class="row__main"><div class="row__title">Changes</div><div class="row__sub">Rescheduled dates, new or changed showtimes</div></div>${sw("notify_changes", n.notify_changes !== false, "Changes")}</div>
-      <div class="row"><div class="row__main"><div class="row__title">Cancellations</div><div class="row__sub">A screening you were told about disappears</div></div>${sw("notify_cancellations", n.notify_cancellations !== false, "Cancellations")}</div>
+      ${row("Email alerts", "At most one email a day, only when something changed", sw("email_enabled", n.email_enabled !== false, "Email alerts"))}
+      ${row("Send to", isFriend() ? "Where your alerts go" : "Leave empty to use the address saved in GitHub",
+        `<input type="email" id="recipient" value="${h(n.recipient || "")}" placeholder="you@example.com" style="width:min(240px,46vw)">`)}
+    </div>
+
+    <div class="group-label">Tell me about</div>
+    <div class="group">
+      ${row("New screenings", "Something you follow is scheduled", sw("notify_new", n.notify_new !== false, "New screenings"))}
+      ${row("Changes", "Rescheduled dates, new or changed showtimes", sw("notify_changes", n.notify_changes !== false, "Changes"))}
+      ${row("Cancellations", "A screening you were told about disappears", sw("notify_cancellations", n.notify_cancellations !== false, "Cancellations"))}
       <div class="row"><div class="row__main"><div class="row__title">Last chance</div>
         <div class="row__sub">${lcDays(n) ? `One reminder ${lcDays(n) === 7 ? "a week" : plural(lcDays(n), "day")} before a film you follow plays for the last time in New York` : "Off — no reminders before final screenings"}</div></div>
         <div class="seg">${[[0, "Off"], [1, "1 day"], [2, "2 days"], [3, "3 days"], [7, "1 week"]].map(([v, l]) => `<button data-action="lc-days" data-v="${v}" aria-pressed="${lcDays(n) === v}">${l}</button>`).join("")}</div></div>
-      ${lcDays(n) ? `<div class="row"><div class="row__main"><div class="row__title">Also before one-off screenings</div><div class="row__sub">A single screening can be the only chance — get a reminder for those too</div></div>${sw("last_chance_one_offs", !!n.last_chance_one_offs, "Remind before one-off screenings")}</div>` : ""}
-      <div class="row"><div class="row__main"><div class="row__title">Weekly digest</div><div class="row__sub">Sundays at 9 AM: everything you follow playing that week</div></div>
-        ${isFriend() ? "" : `<button class="btn btn--sm" data-action="digest-now">Send now</button>`}${sw("weekly_digest", n.weekly_digest !== false, "Weekly digest")}</div>
-      ${isFriend() ? "" : `<div class="row"><div class="row__main"><div class="row__title">Email service</div><div class="row__sub">${prov === "resend" ? "Resend is connected" : prov === "smtp" ? "Your mail server is connected" : "Not confirmed yet — send a test to check"}</div></div>
-        <button class="btn btn--sm" data-action="test-email">Send test email</button></div>`}
+      ${lcDays(n) ? row("Also before one-off screenings", "A single screening can be the only chance — get a reminder for those too", sw("last_chance_one_offs", !!n.last_chance_one_offs, "Remind before one-off screenings")) : ""}
+      ${row("Weekly digest", "Sundays at 9 AM: everything you follow playing that week", sw("weekly_digest", n.weekly_digest !== false, "Weekly digest"))}
     </div>
 
-    <div class="group-label">Phone notifications</div>
-    ${pushBlock()}
-
-    <div class="group-label">What gets emailed</div>
+    <div class="group-label">Only alert me about</div>
     ${filtersBlock(n.filters || {})}
-    <p class="group-foot">Filters only change which screenings are emailed — everything you follow still appears in the app. When formats are chosen, screenings that don’t list a format are skipped.</p>
+    <p class="group-foot">Narrows your alerts (email and phone) — everything you follow still appears in the app. When formats are chosen, screenings that don’t list a format are skipped.</p>
 
-    ${!lbConnected() && !isLocal() ? `<div class="group-label">Letterboxd</div>
-    <div class="group"><div class="row">${LB_MARK}<div class="row__main"><div class="row__title">Connect Letterboxd</div><div class="row__sub">Follow every film you’ve rated highly, get suggestions that know your taste, and never be reminded about what you just saw. Just your username.</div></div>
+    <h2 class="settings-section">Letterboxd</h2>
+    ${!lbConnected() && !isLocal() ? `<div class="group"><div class="row">${LB_MARK}<div class="row__main"><div class="row__title">Connect Letterboxd</div><div class="row__sub">Follow every film you’ve rated highly, get suggestions that know your taste, and never be reminded about what you just saw. Just your username.</div></div>
       <button class="btn btn--sm btn--brass" data-action="lb-start">Connect</button></div></div>` : ""}
-    ${lbConnected() ? `<div class="group-label">Letterboxd</div>
-    <div class="group">${recentRow()}
-      <div class="row"><div class="row__main"><div class="row__title">Also follow my watchlist</div><div class="row__sub">Films on your Letterboxd watchlist appear in Upcoming and are emailed like favorites</div></div>
-        <label class="switch"><input type="checkbox" data-action="lb-set" data-key="include_watchlist" ${lbCfg().include_watchlist ? "checked" : ""} aria-label="Follow watchlist"><span></span></label></div></div>
-    <p class="group-foot">More Letterboxd options are in Watchlist → Letterboxd.</p>` : ""}
+    ${lbConnected() ? `<div class="group">
+      <button class="row row--link" data-action="lb-start">${LB_MARK}<div class="row__main"><div class="row__title">${h(lbCfg().username || "Letterboxd")} <span class="tag tag--following">Connected</span></div><div class="row__sub">Ratings, follows and suggestions</div></div><span aria-hidden="true">›</span></button>
+      ${recentRow()}
+      ${row("Also follow my watchlist", "Films on your Letterboxd watchlist appear in Upcoming and are alerted like favorites",
+        `<label class="switch"><input type="checkbox" data-action="lb-set" data-key="include_watchlist" ${lbCfg().include_watchlist ? "checked" : ""} aria-label="Follow watchlist"><span></span></label>`)}</div>` : ""}
 
-    <div class="group-label">Schedule</div>
+    ${isFriend() ? `<h2 class="settings-section">Feedback</h2>${feedbackRow().replace('<div class="group-label">Feedback</div>', "")}` : ""}
+    ${owner ? `<h2 class="settings-section">Friends & feedback</h2>${friendsBlock().replace('<div class="group-label">Friends</div>', "")}${feedbackInbox()}` : ""}
+
+    <h2 class="settings-section">This device</h2>
     <div class="group">
-      <div class="row"><div class="row__main"><div class="row__title">Daily check</div><div class="row__sub">Every morning, New York time</div></div><span style="font:600 15px var(--font-mono)">${h(fmtTime12(times[0] || "09:00"))}</span></div>
-    </div>
-    <p class="group-foot">${isFriend() ? "Checks run in the cloud, so your phone and computer can be off. Anything new appears here and in your email that morning." : "Checks run on GitHub’s computers, so your Mac and iPhone can be off. Daylight saving is handled automatically, and a check that GitHub starts late is still caught. Tap <b>Check now</b> on the Upcoming page any time you want an extra look."}</p>
-
-    <div class="group-label">Recent checks</div>
-    <div class="group">${runs.length ? runs.map((r) => `<div class="row"><div class="row__main"><div class="row__title">${h(fmtWhen(r.started))} <span style="color:var(--text-3);font-weight:400">· ${r.trigger === "manual" ? "Manual check" : "Daily check"}</span></div>
-        <div class="row__sub">${r.ok ? `${r.dates_scanned} days read · ${plural(r.matched_upcoming || 0, "upcoming match", "upcoming matches")} · ${r.new || 0} new · ${r.updated || 0} updates${r.emailed ? ` · emailed` : ""}` : h(r.error || "Failed")}</div></div>
-        <span class="tag ${r.ok ? "" : "tag--gone"}">${r.ok ? "OK" : "Failed"}</span></div>`).join("") : `<div class="row"><div class="row__main row__sub">No checks yet.</div></div>`}</div>
-
-    <div class="group-label">Appearance</div>
-    <div class="group"><div class="row"><div class="row__main"><div class="row__title">Theme</div></div>
-      <div class="seg">${[["system", "Automatic"], ["evening", "Evening"], ["daylight", "Daylight"]].map(([k, l]) => `<button data-action="theme" data-t="${k}" aria-pressed="${theme === k}">${l}</button>`).join("")}</div></div></div>
-
-    <div class="group"><div class="row"><div class="row__main"><div class="row__title">App icon</div>
-      <div class="row__sub">Used when you add Filament to your Home Screen (re-add it to change)</div></div>
-      <div class="icon-picks">${[["lamp", "Lamp"], ["plywood", "Plywood"], ["gilt", "Gilt"]].map(([k, l]) => `<button class="icon-pick" data-action="app-icon" data-v="${k}" aria-pressed="${appIcon() === k}" aria-label="${l} icon"><img src="${k === "lamp" ? "icon.svg" : `icon-${k}.svg`}" alt=""><span>${l}</span></button>`).join("")}</div></div></div>
-
-    <div class="group-label">This device</div>
-    <div class="group">
-      ${isFriend() ? `<div class="row"><div class="row__main"><div class="row__title">Signed in as ${h(state.src.name || "you")}</div><div class="row__sub">No password — this device stays signed in</div></div>
-        <button class="btn btn--sm btn--danger" data-action="disconnect">Sign out</button></div>`
-      : `<div class="row"><div class="row__main"><div class="row__title">Connected to</div><div class="row__sub">${h(state.src?.label || "")}</div></div>
-        ${isLocal() ? "" : `<button class="btn btn--sm btn--danger" data-action="disconnect">Disconnect</button>`}</div>`}
-      ${isLocal() ? "" : `<div class="row"><div class="row__main"><div class="row__title">Use Filament on another device</div><div class="row__sub">${isFriend() ? "Send yourself a link that opens your Filament, signed in. Or on the new device, choose “Email me a sign-in link.”" : "A private link that opens Filament already signed in. Treat it like a password."}</div></div>
-        <button class="btn btn--sm" data-action="device-link">Share link</button></div>`}
+      ${isFriend() ? row(`Signed in as ${h(state.src.name || "you")}`, "No password — this device stays signed in", `<button class="btn btn--sm btn--danger" data-action="disconnect">Sign out</button>`)
+        : row("Connected to", h(state.src?.label || ""), isLocal() ? "" : `<button class="btn btn--sm btn--danger" data-action="disconnect">Disconnect</button>`)}
+      ${isLocal() ? "" : row("Use Filament on another device", isFriend() ? "Send yourself a link that opens your Filament, signed in. Or on the new device, choose “Email me a sign-in link.”" : "A private link that opens Filament already signed in. Treat it like a password.", `<button class="btn btn--sm" data-action="device-link">Share link</button>`)}
       ${homeScreenRow()}
     </div>
-    ${isFriend() ? feedbackRow() : ""}
-    ${isFriend() || isLocal() ? "" : friendsBlock() + feedbackInbox()}
 
-    <div class="group-label">About</div>
+    <h2 class="settings-section">Appearance</h2>
+    <div class="group">
+      ${row("Theme", "", `<div class="seg">${[["system", "Automatic"], ["evening", "Evening"], ["daylight", "Daylight"]].map(([k, l]) => `<button data-action="theme" data-t="${k}" aria-pressed="${theme === k}">${l}</button>`).join("")}</div>`)}
+      ${row("App icon", "Used when you add Filament to your Home Screen (re-add it to change)",
+        `<div class="icon-picks">${[["lamp", "Lamp"], ["plywood", "Plywood"], ["gilt", "Gilt"]].map(([k, l]) => `<button class="icon-pick" data-action="app-icon" data-v="${k}" aria-pressed="${appIcon() === k}" aria-label="${l} icon"><img src="${k === "lamp" ? "icon.svg" : `icon-${k}.svg`}" alt=""><span>${l}</span></button>`).join("")}</div>`)}
+    </div>
+
+    <h2 class="settings-section">${owner ? "Behind the scenes" : "Checks"}</h2>
+    <div class="group">
+      ${row("Daily check", "Every morning, New York time", `<span style="font:600 15px var(--font-mono)">${h(fmtTime12(times[0] || "09:00"))}</span>`)}
+      ${owner ? row("Email service", prov === "resend" ? "Resend is connected" : prov === "smtp" ? "Your mail server is connected" : "Not confirmed yet — send a test to check", `<button class="btn btn--sm" data-action="test-email">Send test email</button>`) : ""}
+      ${owner ? row("Weekly digest", "Send this week’s digest right now", `<button class="btn btn--sm" data-action="digest-now">Send now</button>`) : ""}
+    </div>
+    <p class="group-foot">${isFriend() ? "Checks run in the cloud, so your phone and computer can be off. Anything new appears here and in your alerts that morning." : "Checks run on GitHub’s computers, so your Mac and iPhone can be off. Daylight saving is handled automatically, and a check that GitHub starts late is still caught. Tap <b>Check now</b> on the Upcoming page any time you want an extra look."}</p>
+    ${owner ? `<details class="more runs"><summary>Recent checks</summary><div class="group">${runs.length ? runs.map((r) => `<div class="row"><div class="row__main"><div class="row__title">${h(fmtWhen(r.started))} <span style="color:var(--text-3);font-weight:400">· ${r.trigger === "manual" ? "Manual check" : "Daily check"}</span></div>
+        <div class="row__sub">${r.ok ? `${r.dates_scanned} days read · ${plural(r.matched_upcoming || 0, "upcoming match", "upcoming matches")} · ${r.new || 0} new · ${r.updated || 0} updates${r.emailed ? ` · emailed` : ""}` : h(r.error || "Failed")}</div></div>
+        <span class="tag ${r.ok ? "" : "tag--gone"}">${r.ok ? "OK" : "Failed"}</span></div>`).join("") : `<div class="row"><div class="row__main row__sub">No checks yet.</div></div>`}</div></details>` : ""}
+
+    <h2 class="settings-section">About</h2>
     <div class="group"><button class="row row--link" data-action="nav" data-view="help"><div class="row__main"><div class="row__title">About & Help</div><div class="row__sub">How Filament works, where listings come from, privacy, FAQ</div></div><span aria-hidden="true">›</span></button></div>
 
   </div>`;
@@ -771,7 +778,8 @@ const FAQ = [
   ["How far ahead does it look?", "As far as the listings go. It reads every published date and keeps going until there’s a long stretch with nothing scheduled, so it automatically reaches further when theaters announce further ahead."],
   ["How does it know a film is by a director I follow?", "Each listing links its directors to a permanent ID number, so matching never depends on spelling. Individual films are matched by title (including alternate titles) and confirmed by year or director, so a remake with the same name won’t set it off."],
   ["What does following a director do?", "Every screening of every film they directed — including ones you didn’t know about — shows up in Upcoming and in your emails. Follow a single film instead if you only care about that one."],
-  ["How does Letterboxd work here?", "Import your Letterboxd export (Watchlist → Letterboxd). Films you rated 4.5★ or higher are followed automatically, “For you” suggests other films you’d likely want, and anything you’ve logged is marked “Seen.” Each morning Filament also reads your public Letterboxd diary, so new favorites are picked up on their own."],
+  ["How does Letterboxd work here?", "Connect with just your username (Watchlist → Letterboxd) — no password. Films you rated 4.5★ or higher are followed automatically, anything you’ve logged is marked “Seen,” and each morning Filament reads your public diary so new favorites are picked up on their own. For your complete history and watchlist, import your Letterboxd export from the same page."],
+  ["How are “For you” picks chosen?", "From your Letterboxd ratings. Filament learns which directors, writers, cinematographers, composers, actors, genres and eras you rate above your own average — so a tough rater’s 4★ counts for more — then checks everything playing in New York against that. Every pick says why, and nothing is suggested without real evidence. Films you’ve already seen are left out."],
   ["Why isn’t a favorite showing up?", "If you watched it in the last 4 months, Filament assumes you don’t need a reminder yet. Change or turn off that rule in Settings → Letterboxd. It may also simply not be scheduled in New York right now — try “Is it playing?” at the top of Upcoming."],
   ["What gets stored about me?", "Only what Filament needs: your name and email (for alerts), the directors and films you follow, your settings, and from Letterboxd just titles, years, ratings, watch dates and your watchlist — never your profile or reviews. It’s kept private, never shared or sold, and there’s no password to leak."],
   ["How do I use it on another phone or computer?", "Open Filament there and choose “Email me a sign-in link” — or in Settings, tap “Share link” on a device you already use. No passwords."],
@@ -1522,12 +1530,12 @@ function rememberSearchSoon(q) {
 }
 
 /* --------------------------------------------------------- what's new */
-const WHATS_NEW = { id: "2026-11-weekly", items: [
-  ["Weekly digest", "Every Sunday at 9 AM: what you follow that’s playing that week — with a link to send it to a friend."],
-  ["Last chance", "A heads-up when a film you follow is down to its final NYC screening."],
-  ["Press and hold", "Hold any screening for Calendar, Share, Tickets and Directions."],
-  ["Tonight · This weekend", "Quick filters at the top of Upcoming."],
-  ["Sign in on another device", "Settings → This device makes a private link, so there’s no token to paste."],
+const WHATS_NEW = { id: "2026-11-taste", items: [
+  ["For you, with reasons", "Suggestions now learn your taste from your Letterboxd ratings — directors, cinematographers, writers, composers, genres — and say why: “Shot by Robby Müller, like Paris, Texas.”"],
+  ["Letterboxd in one step", "Connect with just your username. Import your full history any time from Watchlist → Letterboxd."],
+  ["Settings, reorganized", "Alerts first — how you’re told and what about — then Letterboxd, friends and this device."],
+  ["Feedback", "Friends can send bugs and ideas straight from Settings."],
+  ["A few more hidden things", "Some new directors are hiding in here. You might find one by tapping home."],
 ] };
 function maybeWhatsNew() {
   let seen = null;
@@ -2224,7 +2232,7 @@ function bindWelcome() {
 applyTheme();
 // Instant launch & offline: cache the app itself (never your data).
 if ("serviceWorker" in navigator && !isLocal()) {
-  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261110001015").catch(() => {}));
+  addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=20261110001939").catch(() => {}));
 }
 // Friend invite links: #invite=<key>&api=<friends service> (the fragment never reaches any server).
 (function acceptInvite() {

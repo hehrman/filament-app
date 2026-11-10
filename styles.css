@@ -964,3 +964,9 @@ body { overscroll-behavior-y: contain; }
 .egg--altman span:nth-child(4) { right: 4%; top: 53%; }
 .egg--altman span:nth-child(5) { left: 28%; top: 64%; }
 .egg--fin svg { margin-bottom: max(130px, calc(env(safe-area-inset-bottom) + 120px)); }
+
+/* Settings: large section headings, Apple-style */
+.settings-section { font: 700 22px/1.2 var(--font-display); letter-spacing: -.02em; margin: 34px 4px 4px; }
+.page-head + .settings-section { margin-top: 8px; }
+.settings-lede { color: var(--text-2); font-size: 14.5px; line-height: 1.5; margin: 2px 4px 6px; }
+.runs > summary { margin-top: 14px; }
